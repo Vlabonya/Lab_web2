@@ -1,0 +1,665 @@
+/* === ОСНОВНЫЕ СТИЛИ === */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: #fff;
+  color: #333;
+  line-height: 1.5;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+button,
+input,
+textarea,
+label {
+  font-family: inherit;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+/* === HEADER === */
+.header {
+  padding: 40px 0 0 0;
+}
+
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.logo-image {
+  width: 181px;
+  height: 40px;
+  display: block;
+}
+
+.auth-buttons {
+  display: flex;
+  gap: 20px;
+}
+
+.auth-btn {
+  background: none;
+  border: none;
+  font-weight: 500;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-size: 16px;
+  color: #333;
+  border-radius: 6px;
+  transition: color 0.2s;
+  display: inline-block;
+  text-decoration: none;
+}
+
+.auth-btn:hover {
+  color: #FF006B;
+}
+
+/* === МОДАЛЬНОЕ ОКНО (Pure CSS) === */
+.tab-radio {
+  display: none;
+}
+
+.close-checkbox {
+  display: none;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  display: none;
+  /* По умолчанию скрыто */
+}
+
+.modal-overlay.active {
+  display: flex;
+}
+
+.modal {
+  background: white;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 500px;
+  position: relative;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+/* Исправление для кнопок авторизации в хедере */
+.auth-buttons button {
+  background: none;
+  border: none;
+  font-weight: 500;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-size: 16px;
+  color: #333;
+  border-radius: 6px;
+  transition: background-color 0.2s;
+}
+
+.auth-buttons button:hover {
+  background-color: #f5f5f5;
+}
+
+/* Убираем старые стили для чекбоксов, если они есть */
+.tab-radio,
+.close-checkbox {
+  display: none;
+}
+
+.modal-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+  cursor: pointer;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+
+.modal-content {
+  padding: 40px;
+  position: relative;
+}
+
+/* Стили для табов переключения */
+.auth-tabs {
+  display: flex;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 32px;
+}
+
+.auth-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 16px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #999;
+  cursor: pointer;
+  transition: all 0.3s;
+  border-bottom: 2px solid transparent;
+  text-align: center;
+}
+
+.auth-tab:hover {
+  color: #666;
+  background: #f9f9f9;
+}
+
+/* Управление отображением форм */
+.auth-form-container {
+  display: none;
+}
+
+/* Показываем форму входа когда выбран таб входа */
+#login-tab:checked~.modal-overlay .login-form {
+  display: block;
+}
+
+/* Показываем форму регистрации когда выбран таб регистрации */
+#register-tab:checked~.modal-overlay .register-form {
+  display: block;
+}
+
+/* Стили для форм */
+.auth-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-row {
+  margin-bottom: 20px;
+}
+
+.form-row input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid #E0E0E0;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: all 0.2s;
+  background: #fafafa;
+}
+
+.form-row input:focus {
+  outline: none;
+  border-color: #e91e63;
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(233, 30, 99, 0.1);
+}
+
+/* Два столбца для формы регистрации */
+.form-two-columns {
+  display: flex;
+  gap: 16px;
+}
+
+.form-two-columns input {
+  flex: 1;
+  min-width: 0;
+}
+
+.checkbox-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.checkbox-group input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.checkbox-group label {
+  font-size: 14px;
+  color: #666;
+  line-height: 1.4;
+  flex: 1;
+}
+
+.submit-btn {
+  background: #e91e63;
+  color: white;
+  border: none;
+  padding: 16px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.submit-btn:hover {
+  background: #c2185b;
+}
+
+.form-footer {
+  text-align: center;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #eee;
+}
+
+.form-footer p {
+  font-size: 14px;
+  color: #999;
+  font-style: italic;
+}
+
+.close-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: none;
+  border: none;
+  font-size: 28px;
+  cursor: pointer;
+  color: #999;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s;
+  z-index: 1001;
+}
+
+.close-btn:hover {
+  color: #333;
+  background: #f5f5f5;
+}
+
+/* === ОСТАЛЬНЫЕ СТИЛИ === */
+.add-btn {
+  background: #e91e63;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 248px;
+  height: 60px;
+  padding: 0;
+}
+
+.add-btn:hover {
+  background: #c2185b;
+}
+
+.main {
+  padding: 40px 0;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+}
+
+.section-title {
+  font-size: 48px;
+  font-weight: 500;
+  color: #181818;
+  line-height: 60px;
+}
+
+/* === СЕТКА ОБЪЯВЛЕНИЙ НА ГЛАВНОЙ === */
+.ads-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  /* 5 колонок на десктопе */
+  gap: 24px;
+  margin-bottom: 48px;
+}
+
+/* 4 колонки на экранах 1200px */
+@media (max-width: 1200px) {
+  .ads-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* 3 колонки на экранах 992px */
+@media (max-width: 992px) {
+  .ads-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* 2 колонки на мобильных (768px и меньше) */
+@media (max-width: 768px) {
+  .ads-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+
+  .ad-card {
+    width: 100%;
+    height: auto;
+  }
+
+  .ad-img {
+    height: 180px;
+  }
+}
+
+/* 1 колонка на очень маленьких экранах */
+@media (max-width: 480px) {
+  .ads-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Карточка объявления */
+.ad-card {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  text-align: left;
+  transition: box-shadow 0.2s, transform 0.2s;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.ad-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.ad-img {
+  width: 100%;
+  height: 224px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f9f9f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ad-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+
+.ad-price {
+  font-weight: 600;
+  color: #181818;
+  font-size: 20px;
+  margin-bottom: 8px;
+  line-height: 26px;
+  padding: 0 16px;
+}
+
+.ad-title {
+  font-size: 14px;
+  color: #989898;
+  line-height: 20px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  height: 40px;
+  padding: 0 16px 16px;
+  flex-grow: 1;
+}
+
+.load-more {
+  text-align: center;
+  margin: 40px 0;
+}
+
+.show-more-btn {
+  background: #fff;
+  border: 2px solid #FF006B;
+  color: #FF006B;
+  padding: 12px 24px;
+  border-radius: 10px;
+  font-weight: 500;
+  font-size: 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s;
+  width: -webkit-fill-available;
+}
+
+.show-more-btn:hover {
+  background: #FF006B;
+  color: #fff;
+}
+
+.show-more-btn svg {
+  transition: transform 0.2s;
+}
+
+.show-more-btn:hover svg {
+  transform: translateY(2px);
+}
+
+.footer {
+  padding: 32px 0;
+  border-top: 1px solid #eee;
+  font-size: 14px;
+  color: #777;
+}
+
+.footer-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.footer-email {
+  color: #FF006B;
+  font-weight: 400;
+}
+
+.footer-links a {
+  color: #495057;
+  font-weight: 400;
+}
+
+/* === СТИЛИ ДЛЯ СТРАНИЦЫ ДЕТАЛЕЙ === */
+.detail-page .header-top {
+  margin-bottom: 0;
+}
+
+.detail-page .main {
+  padding-top: 0;
+}
+
+/* Адаптивность сетки для главной */
+@media (max-width: 1200px) {
+  .ads-grid {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 768px) {
+  .ad-card {
+    width: 216px;
+    height: 304px;
+  }
+
+  .ad-img {
+    height: 200px;
+  }
+
+  .section-title {
+    font-size: 36px;
+    line-height: 48px;
+  }
+
+  .form-two-columns {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal-content {
+    padding: 24px;
+  }
+
+  .modal-content h2 {
+    font-size: 20px;
+    margin-bottom: 24px;
+  }
+
+  .auth-form input {
+    padding: 14px;
+    font-size: 14px;
+  }
+
+  .submit-btn {
+    padding: 14px;
+    font-size: 14px;
+  }
+
+  .auth-tab {
+    padding: 14px;
+    font-size: 14px;
+  }
+
+  .ad-card {
+    width: 47%;
+    height: auto;
+    min-height: 250px;
+  }
+
+  .ad-img {
+    height: 150px;
+  }
+
+  .ad-price {
+    font-size: 18px;
+    padding: 0 12px;
+  }
+
+  .ad-title {
+    padding: 0 12px 12px;
+    font-size: 13px;
+    height: 36px;
+  }
+
+  .section-title {
+    font-size: 28px;
+    line-height: 36px;
+  }
+
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 20px;
+  }
+
+  .add-btn {
+    width: 100%;
+    height: 50px;
+  }
+}
+
+/* Для экранов шириной 320px и меньше */
+@media (max-width: 320px) {
+  .ad-card {
+    width: 100%;
+    height: 280px;
+  }
+
+  .ad-img {
+    height: 180px;
+  }
+}
+
+.auth-tab.active {
+  color: #e91e63;
+  border-bottom: 2px solid #e91e63;
+}
+
+.auth-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 16px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #999;
+  cursor: pointer;
+  transition: all 0.3s;
+  border-bottom: 2px solid transparent;
+  text-align: center;
+}
+
+.user-welcome {
+  font-weight: 500;
+  color: #333;
+  padding: 10px 0;
+  display: inline-block;
+}
