@@ -1,6 +1,6 @@
-<!DOCTYPE html>
 <?php
-// Подключаемся к БД через общий файл
+declare(strict_types=1);
+session_start();
 require_once "db_connect.php";
 
 // безопасный эскейп — используем везде вместо htmlspecialchars(...)
@@ -8,11 +8,34 @@ function e($v) {
     return htmlspecialchars($v ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
-// Получаем все объявления (используем id как PK)
-$sql = "SELECT * FROM ads ORDER BY created_at DESC";
-$result = $pdo->prepare($sql);
-$result->execute();
+// Получаем информацию о текущем пользователе
+$currentUser = null;
+if (!empty($_SESSION['user_id'])) {
+    try {
+        $userStmt = $pdo->prepare('SELECT id, name, email, phone FROM users WHERE id = ? LIMIT 1');
+        $userStmt->execute([$_SESSION['user_id']]);
+        $currentUser = $userStmt->fetch(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log("Ошибка при получении пользователя: " . $e->getMessage());
+    }
+}
+
+// Постраничный вывод - получаем первые 10 записей
+$limit = 10;
+$sql = "SELECT * FROM ads ORDER BY id DESC LIMIT :limit";
+try {
+    $stmt = $pdo->prepare($sql);
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->execute();
+    $ads = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $lastId = !empty($ads) ? (int)$ads[count($ads) - 1]['id'] : 0;
+} catch (PDOException $e) {
+    error_log("Ошибка при получении объявлений: " . $e->getMessage());
+    $ads = [];
+    $lastId = 0;
+}
 ?>
+<!DOCTYPE html>
 <html lang="ru">
 
 <head>
@@ -33,10 +56,15 @@ $result->execute();
                 <div class="logo">
                     <a href="index.php"><img src="images/logo.svg" alt="Логотип" class="logo-image"></a>
                 </div>
-                <!-- Кнопки авторизации справа (теперь вверху) -->
+                <!-- Кнопки авторизации справа -->
                 <div class="auth-buttons">
-                    <button class="auth-btn" data-tab="register-tab">Регистрация</button>
-                    <button class="auth-btn" data-tab="login-tab">Вход</button>
+                    <?php if ($currentUser): ?>
+                        <span class="user-welcome">Здравствуйте, <?= e($currentUser['name']) ?></span>
+                        <a href="logout.php" class="auth-btn">Выход</a>
+                    <?php else: ?>
+                        <button class="auth-btn" data-tab="register">Регистрация</button>
+                        <button class="auth-btn" data-tab="login">Вход</button>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -46,48 +74,63 @@ $result->execute();
         <div class="container">
             <div class="section-header">
                 <h1 class="section-title">Новые объявления</h1>
-                <button class="add-btn" onclick="document.getElementById('addDialog') && document.getElementById('addDialog').showModal && document.getElementById('addDialog').showModal();">
-                    <span class="add-icon">+</span>
-                    <span class="add-text">Добавить объявление</span>
-                </button>
+                <?php if ($currentUser): ?>
+                    <a href="add.php" class="add-btn">
+                        <span class="add-icon">
+                            <img src="images/plus.svg" alt="+" />
+                        </span>
+                        <span class="add-text">Добавить объявление</span>
+                    </a>
+                <?php else: ?>
+                    <button class="add-btn" id="addBtn">
+                        <span class="add-icon">
+                            <img src="images/plus.svg" alt="+" />
+                        </span>
+                        <span class="add-text">Добавить объявление</span>
+                    </button>
+                <?php endif; ?>
             </div>
 
-            <div class="ads-grid">
-                <?php while ($row = $result->fetch(PDO::FETCH_ASSOC)) { 
-                    // Используем поле id как первичный ключ (в БД у вас id)
-                    $adId = isset($row['id']) ? (int)$row['id'] : (isset($row['ads_id']) ? (int)$row['ads_id'] : 0);
-                    // безопасное имя файла (basename) и экранирование
-                    $photo = !empty($row['ads_photo']) ? e(basename($row['ads_photo'])) : '';
-                    $title = e($row['ads_title'] ?? '');
-                    $price = isset($row['ads_price']) ? number_format((int)$row['ads_price'], 0, '', ' ') : '0';
-                ?>
-                    <div class="ad-card">
-                        <div class="ad-img">
-                            <a href="detail.php?id=<?= $adId ?>">
-                                <?php if ($photo): ?>
-                                    <img src="images/<?= $photo ?>"
-                                         alt="<?= $title ?>"
-                                         class="ad-image">
-                                <?php else: ?>
-                                    <div class="no-photo-placeholder">Нет изображения</div>
-                                <?php endif; ?>
-                            </a>
+            <div class="ads-grid" id="adsGrid">
+                <?php if (!empty($ads)): ?>
+                    <?php foreach ($ads as $row): 
+                        $adId = (int)$row['id'];
+                        $photo = !empty($row['ads_photo']) ? e(basename($row['ads_photo'])) : '';
+                        $title = e($row['ads_title'] ?? '');
+                        $price = isset($row['ads_price']) && is_numeric($row['ads_price']) ? number_format((int)$row['ads_price'], 0, '', ' ') : '0';
+                    ?>
+                        <div class="ad-card">
+                            <div class="ad-img">
+                                <a href="detail.php?id=<?= $adId ?>">
+                                    <?php if ($photo): ?>
+                                        <img src="images/<?= $photo ?>"
+                                             alt="<?= $title ?>"
+                                             class="ad-image">
+                                    <?php else: ?>
+                                        <div class="no-photo-placeholder">Нет изображения</div>
+                                    <?php endif; ?>
+                                </a>
+                            </div>
+
+                            <div class="ad-price"><?= $price ?> ₽</div>
+                            <div class="ad-title"><?= $title ?></div>
                         </div>
-
-                        <div class="ad-price"><?= e($price) ?> ₽</div>
-                        <div class="ad-title"><?= $title ?></div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: #999;">
+                        Объявлений пока нет.
                     </div>
-                <?php } ?>
+                <?php endif; ?>
             </div>
 
-            <div class="load-more">
-                <button class="show-more-btn">
-                    Показать ещё
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#e91e63" stroke-width="2">
+            <?php if (!empty($ads) && count($ads) >= $limit): ?>
+                <button class="show-more-btn" id="showMoreBtn" data-last-id="<?= $lastId ?>">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e91e63" stroke-width="2">
                         <path d="M6 9l6 6 6-6" />
                     </svg>
+                    Показать ещё
                 </button>
-            </div>
+            <?php endif; ?>
         </div>
     </main>
 
@@ -101,7 +144,7 @@ $result->execute();
     </footer>
 
     <!-- Модальное окно авторизации (скрыто по умолчанию) -->
-    <div class="modal-overlay" id="authModal" style="display: none;">
+    <div class="modal-overlay" id="authModal">
         <div class="modal-backdrop" onclick="closeModal()"></div>
         <div class="modal">
             <div class="modal-content">
@@ -113,22 +156,26 @@ $result->execute();
 
                 <!-- Форма регистрации -->
                 <div class="auth-form-container register-form" id="registerForm">
-                    <form class="auth-form" id="registerFormElement" onsubmit="handleRegister(event)">
+                    <?php if (isset($_GET['reg_error'])): ?>
+                        <div style="color: red; margin-bottom: 15px; padding: 10px; background: #ffe6e6; border-radius: 5px;">
+                            <?= e($_GET['reg_error']) ?>
+                        </div>
+                    <?php endif; ?>
+                    <form class="auth-form" id="registerFormElement" method="post" action="register.php" onsubmit="return handleRegister(event)">
                         <div class="form-row">
-                            <input type="text" placeholder="Ваше имя" required class="form-input" id="regName">
+                            <input name="name" type="text" placeholder="Ваше имя" required class="form-input" id="regName">
                         </div>
                         <div class="form-row form-two-columns">
-                            <input type="email" placeholder="Email" required class="form-input" id="regEmail">
-                            <input type="tel" placeholder="Мобильный телефон" required class="form-input" id="regPhone">
+                            <input name="email" type="email" placeholder="Email" required class="form-input" id="regEmail">
+                            <input name="phone" type="tel" placeholder="Мобильный телефон" required class="form-input" id="regPhone">
                         </div>
                         <div class="form-row form-two-columns">
-                            <input type="password" placeholder="Пароль" required class="form-input" id="regPassword">
-                            <input type="password" placeholder="Повторите пароль" required class="form-input"
-                                id="regConfirmPassword">
+                            <input name="password" type="password" placeholder="Пароль" required class="form-input" id="regPassword">
+                            <input name="confirm_password" type="password" placeholder="Повторите пароль" required class="form-input" id="regConfirmPassword">
                         </div>
 
                         <div class="checkbox-group">
-                            <input type="checkbox" id="agree" required class="checkbox-input">
+                            <input type="checkbox" id="agree" name="agree" required class="checkbox-input">
                             <label for="agree" class="checkbox-label">Согласен на обработку персональных данных</label>
                         </div>
 
@@ -142,12 +189,17 @@ $result->execute();
 
                 <!-- Форма авторизации -->
                 <div class="auth-form-container login-form" id="loginForm" style="display: none;">
-                    <form class="auth-form" id="loginFormElement" onsubmit="handleLogin(event)">
+                    <?php if (isset($_GET['login_error'])): ?>
+                        <div style="color: red; margin-bottom: 15px; padding: 10px; background: #ffe6e6; border-radius: 5px;">
+                            <?= e($_GET['login_error']) ?>
+                        </div>
+                    <?php endif; ?>
+                    <form class="auth-form" id="loginFormElement" method="post" action="login.php" onsubmit="return handleLogin(event)">
                         <div class="form-row">
-                            <input type="email" placeholder="Email" required class="form-input" id="loginEmail">
+                            <input name="email" type="email" placeholder="Email" required class="form-input" id="loginEmail">
                         </div>
                         <div class="form-row">
-                            <input type="password" placeholder="Пароль" required class="form-input" id="loginPassword">
+                            <input name="password" type="password" placeholder="Пароль" required class="form-input" id="loginPassword">
                         </div>
 
                         <button type="submit" class="submit-btn">Войти</button>
@@ -166,19 +218,6 @@ $result->execute();
     <script>
         // Инициализация для главной страницы
         document.addEventListener('DOMContentLoaded', function () {
-            console.log('Main page loaded');
-
-            // Проверяем пользователя
-            const userData = localStorage.getItem('currentUser');
-            if (userData) {
-                try {
-                    const user = JSON.parse(userData);
-                    updateHeader(user);
-                } catch (e) {
-                    console.error('Error parsing user data:', e);
-                }
-            }
-
             // Инициализируем кнопки авторизации
             const authButtons = document.querySelectorAll('.auth-btn[data-tab]');
             authButtons.forEach(btn => {
@@ -220,27 +259,26 @@ $result->execute();
                 }
             });
 
-            // Кнопка "Добавить объявление"
-            const addBtn = document.querySelector('.add-btn');
+            // Кнопка "Добавить объявление" для неавторизованных
+            const addBtn = document.getElementById('addBtn');
             if (addBtn) {
                 addBtn.addEventListener('click', function () {
-                    const user = JSON.parse(localStorage.getItem('currentUser') || 'null');
-                    if (!user) {
-                        alert('Для добавления объявления необходимо войти в систему');
-                        openModal('login');
-                    } else {
-                        alert('Функция добавления объявления (в разработке)');
-                    }
+                    openModal('login');
                 });
+            }
+
+            // Кнопка "Показать ещё" для постраничного вывода
+            const showMoreBtn = document.getElementById('showMoreBtn');
+            if (showMoreBtn) {
+                showMoreBtn.addEventListener('click', loadMoreAds);
             }
         });
 
-        // Функции (те же что и в detail.php)
+        // Функции модального окна
         function openModal(tab = 'register') {
             const modal = document.getElementById('authModal');
             if (!modal) return;
-
-            modal.style.display = 'block';
+            modal.classList.add('active');
             document.body.style.overflow = 'hidden';
             switchTab(tab);
         }
@@ -248,8 +286,7 @@ $result->execute();
         function closeModal() {
             const modal = document.getElementById('authModal');
             if (!modal) return;
-
-            modal.style.display = 'none';
+            modal.classList.remove('active');
             document.body.style.overflow = '';
         }
 
@@ -274,6 +311,27 @@ $result->execute();
             }
         }
 
+        // Валидация форм
+        function validateName(name) {
+            return /^[а-яА-ЯёЁ\s\-]+$/.test(name);
+        }
+
+        function validateEmail(email) {
+            return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+        }
+
+        function validatePhone(phone) {
+            // Мобильный телефон: +7 или 8, затем 10 цифр
+            const cleaned = phone.replace(/\D/g, '');
+            return cleaned.length === 11 && (cleaned[0] === '7' || cleaned[0] === '8');
+        }
+
+        function validatePassword(password) {
+            if (password.length < 6) return false;
+            // Пароль не может состоять только из цифр
+            return !/^\d+$/.test(password);
+        }
+
         function handleRegister(event) {
             event.preventDefault();
 
@@ -284,9 +342,29 @@ $result->execute();
             const confirmPassword = document.getElementById('regConfirmPassword')?.value;
             const agree = document.getElementById('agree')?.checked;
 
-            // Простая валидация
+            // Валидация
             if (!name || !email || !phone || !password || !confirmPassword) {
                 alert('Все поля обязательны для заполнения');
+                return;
+            }
+
+            if (!validateName(name)) {
+                alert('Имя может содержать только русские буквы, пробелы и дефисы');
+                return;
+            }
+
+            if (!validateEmail(email)) {
+                alert('Введите корректный email');
+                return;
+            }
+
+            if (!validatePhone(phone)) {
+                alert('Введите корректный мобильный телефон');
+                return;
+            }
+
+            if (!validatePassword(password)) {
+                alert('Пароль должен быть не менее 6 символов и не состоять только из цифр');
                 return;
             }
 
@@ -295,37 +373,13 @@ $result->execute();
                 return;
             }
 
-            if (password.length < 6) {
-                alert('Пароль должен быть не менее 6 символов');
-                return;
-            }
-
             if (!agree) {
                 alert('Необходимо согласие на обработку персональных данных');
                 return;
             }
 
-            // Сохраняем пользователя
-            const user = {
-                id: Date.now(),
-                name: name,
-                email: email,
-                phone: phone,
-                registeredAt: new Date().toISOString()
-            };
-
-            localStorage.setItem('currentUser', JSON.stringify(user));
-
-            // Обновляем хедер
-            updateHeader(user);
-
-            // Закрываем модальное окно
-            closeModal();
-
-            // Показываем уведомление
-            setTimeout(() => {
-                alert('Регистрация прошла успешно! Добро пожаловать, ' + name + '!');
-            }, 100);
+            // Отправка формы на сервер
+            return true;
         }
 
         function handleLogin(event) {
@@ -339,70 +393,68 @@ $result->execute();
                 return;
             }
 
-            // Простая проверка для демо
-            if (password.length < 6) {
-                alert('Пароль должен быть не менее 6 символов');
+            if (!validateEmail(email)) {
+                alert('Введите корректный email');
                 return;
             }
 
-            // Создаем или загружаем пользователя
-            let user = JSON.parse(localStorage.getItem('currentUser') || 'null');
-
-            if (!user) {
-                user = {
-                    id: Date.now(),
-                    name: email.split('@')[0],
-                    email: email,
-                    phone: '+7 (999) 999-99-99',
-                    loggedInAt: new Date().toISOString()
-                };
-            } else if (user.email !== email) {
-                user.email = email;
-                user.name = email.split('@')[0];
-            }
-
-            localStorage.setItem('currentUser', JSON.stringify(user));
-
-            // Обновляем хедер
-            updateHeader(user);
-
-            // Закрываем модальное окно
-            closeModal();
-
-            // Показываем уведомление
-            setTimeout(() => {
-                alert('Вход выполнен успешно!');
-            }, 100);
+            // Отправка формы на сервер
+            return true;
         }
 
-        function updateHeader(user) {
-            const authButtons = document.querySelector('.auth-buttons');
-            if (!authButtons) return;
+        // Постраничный вывод
+        function loadMoreAds() {
+            const btn = document.getElementById('showMoreBtn');
+            if (!btn) return;
 
-            if (user) {
-                authButtons.innerHTML = `
-            <span class="user-welcome">Здравствуйте, ${user.name}</span>
-            <button class="auth-btn" onclick="logout()">Выход</button>
-        `;
-            } else {
-                authButtons.innerHTML = `
-            <button class="auth-btn" data-tab="register">Регистрация</button>
-            <button class="auth-btn" data-tab="login">Вход</button>
-        `;
-            }
-        }
+            const lastId = btn.getAttribute('data-last-id');
+            if (!lastId) return;
 
-        function logout() {
-            if (confirm('Вы уверены, что хотите выйти?')) {
-                localStorage.removeItem('currentUser');
-                updateHeader(null);
-                alert('Вы вышли из системы');
+            btn.disabled = true;
+            btn.textContent = 'Загрузка...';
 
-                // Обновляем страницу
-                setTimeout(() => {
-                    window.location.reload();
-                }, 500);
-            }
+            fetch(`load_more.php?last_id=${lastId}`)
+                .then(response => response.text())
+                .then(html => {
+                    if (html.trim()) {
+                        const grid = document.getElementById('adsGrid');
+                        if (grid) {
+                            grid.insertAdjacentHTML('beforeend', html);
+                            // Обновляем last_id из последнего элемента
+                            const cards = grid.querySelectorAll('.ad-card');
+                            if (cards.length > 0) {
+                                const lastCard = cards[cards.length - 1];
+                                const lastLink = lastCard.querySelector('a[href*="id="]');
+                                if (lastLink) {
+                                    const match = lastLink.href.match(/id=(\d+)/);
+                                    if (match) {
+                                        btn.setAttribute('data-last-id', match[1]);
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        btn.style.display = 'none';
+                    }
+                    btn.disabled = false;
+                    btn.innerHTML = `
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e91e63" stroke-width="2">
+                            <path d="M6 9l6 6 6-6" />
+                        </svg>
+                        Показать ещё
+                    `;
+                })
+                .catch(error => {
+                    console.error('Ошибка загрузки:', error);
+                    alert('Ошибка при загрузке объявлений');
+                    btn.disabled = false;
+                    btn.innerHTML = `
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e91e63" stroke-width="2">
+                            <path d="M6 9l6 6 6-6" />
+                        </svg>
+                        Показать ещё
+                    `;
+                });
         }
     </script>
 </body>

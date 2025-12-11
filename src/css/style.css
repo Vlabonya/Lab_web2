@@ -34,12 +34,13 @@ label {
 .container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0 20px;
 }
 
 /* === HEADER === */
-.header {
-  padding: 40px 0 0 0;
+.header .container{
+  padding: 20px 0 0 0;
+  border-bottom: 1px solid #e5e5e5;
+  padding-bottom: 20px;
 }
 
 .header-top {
@@ -57,7 +58,6 @@ label {
 
 .auth-buttons {
   display: flex;
-  gap: 20px;
 }
 
 .auth-btn {
@@ -78,15 +78,7 @@ label {
   color: #FF006B;
 }
 
-/* === МОДАЛЬНОЕ ОКНО (Pure CSS) === */
-.tab-radio {
-  display: none;
-}
-
-.close-checkbox {
-  display: none;
-}
-
+/* === МОДАЛЬНОЕ ОКНО === */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -94,16 +86,14 @@ label {
   width: 100%;
   height: 100%;
   background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
+  display: none; /* скрываем по умолчанию */
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  display: none;
-  /* По умолчанию скрыто */
 }
 
 .modal-overlay.active {
-  display: flex;
+  display: flex; /* показываем и центрируем при active */
 }
 
 .modal {
@@ -113,13 +103,15 @@ label {
   max-width: 500px;
   position: relative;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  padding: 20px;
+  z-index: 1001;
 }
 
 /* Исправление для кнопок авторизации в хедере */
 .auth-buttons button {
   background: none;
   border: none;
-  font-weight: 500;
+  font-weight: 400;
   padding: 10px 20px;
   cursor: pointer;
   font-size: 16px;
@@ -132,33 +124,12 @@ label {
   background-color: #f5f5f5;
 }
 
-/* Убираем старые стили для чекбоксов, если они есть */
-.tab-radio,
-.close-checkbox {
-  display: none;
-}
-
 .modal-backdrop {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(2px);
+  inset: 0; /* top:0; right:0; bottom:0; left:0; */
+  background: rgba(0, 0, 0, 0.4);
   cursor: pointer;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -48%);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%);
-  }
+  z-index: 1000;
 }
 
 .modal-content {
@@ -195,16 +166,6 @@ label {
 /* Управление отображением форм */
 .auth-form-container {
   display: none;
-}
-
-/* Показываем форму входа когда выбран таб входа */
-#login-tab:checked~.modal-overlay .login-form {
-  display: block;
-}
-
-/* Показываем форму регистрации когда выбран таб регистрации */
-#register-tab:checked~.modal-overlay .register-form {
-  display: block;
 }
 
 /* Стили для форм */
@@ -323,11 +284,10 @@ label {
 
 /* === ОСТАЛЬНЫЕ СТИЛИ === */
 .add-btn {
-  background: #e91e63;
+  background: #FF006B;
   color: #fff;
   border: none;
-  border-radius: 8px;
-  font-weight: 600;
+  border-radius: 10px;
   font-size: 16px;
   cursor: pointer;
   display: flex;
@@ -337,6 +297,14 @@ label {
   width: 248px;
   height: 60px;
   padding: 0;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+}
+
+.add-icon img {
+  width: 24px;     /* размер плюса */
+  height: 24px;
+  display: block;
 }
 
 .add-btn:hover {
@@ -344,7 +312,7 @@ label {
 }
 
 .main {
-  padding: 40px 0;
+  padding: 20px 0;
 }
 
 .section-header {
@@ -356,9 +324,10 @@ label {
 
 .section-title {
   font-size: 48px;
-  font-weight: 500;
+  font-weight: 400;
   color: #181818;
   line-height: 60px;
+  font-family: 'Inter', sans-serif;
 }
 
 /* === СЕТКА ОБЪЯВЛЕНИЙ НА ГЛАВНОЙ === */
@@ -411,22 +380,15 @@ label {
 /* Карточка объявления */
 .ad-card {
   background: #fff;
-  border: 1px solid #eee;
-  border-radius: 12px;
-  text-align: left;
-  transition: box-shadow 0.2s, transform 0.2s;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
-  text-decoration: none;
-  color: inherit;
   cursor: pointer;
+  width: calc(25% - 30px);
+  min-width: 220px;
+  flex-grow: 1;
+  
 }
 
-.ad-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  transform: translateY(-2px);
-}
 
 .ad-img {
   width: 100%;
@@ -447,12 +409,13 @@ label {
 }
 
 .ad-price {
-  font-weight: 600;
+  font-weight: 500;
   color: #181818;
   font-size: 20px;
   margin-bottom: 8px;
   line-height: 26px;
   padding: 0 16px;
+  margin-top: 12px;
 }
 
 .ad-title {
@@ -461,6 +424,7 @@ label {
   line-height: 20px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   height: 40px;
@@ -468,9 +432,11 @@ label {
   flex-grow: 1;
 }
 
-.load-more {
+.no-photo-placeholder {
+  color: #999;
+  font-size: 14px;
   text-align: center;
-  margin: 40px 0;
+  padding: 20px;
 }
 
 .show-more-btn {
@@ -641,20 +607,6 @@ label {
 .auth-tab.active {
   color: #e91e63;
   border-bottom: 2px solid #e91e63;
-}
-
-.auth-tab {
-  flex: 1;
-  background: none;
-  border: none;
-  padding: 16px;
-  font-size: 16px;
-  font-weight: 500;
-  color: #999;
-  cursor: pointer;
-  transition: all 0.3s;
-  border-bottom: 2px solid transparent;
-  text-align: center;
 }
 
 .user-welcome {

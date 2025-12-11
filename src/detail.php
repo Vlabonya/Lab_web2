@@ -37,11 +37,16 @@ $sql = "
 ";
 
 
-$stmt = $pdo->prepare($sql);
-$stmt->bindParam(':id', $id, PDO::PARAM_INT);
-$stmt->execute();
-
-$ad = $stmt->fetch(PDO::FETCH_ASSOC);
+try {
+    $stmt = $pdo->prepare($sql);
+    $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+    $stmt->execute();
+    $ad = $stmt->fetch(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log("Ошибка при получении объявления: " . $e->getMessage());
+    header("Location: index.php");
+    exit();
+}
 
 // Если объявление не найдено - редирект на главную
 if (!$ad) {
@@ -49,29 +54,63 @@ if (!$ad) {
     exit();
 }
 
-// Получаем отклики на это объявление
-$responses_sql = "
-    SELECT 
-        r.id,
-        r.ad_id,
-        r.name,
-        r.phone,
-        r.user_id,
-        r.created_at,
-        u.id AS user_id,
-        u.name AS user_name,
-        u.phone AS user_phone
-    FROM responses r
-    LEFT JOIN users u ON r.user_id = u.id
-    WHERE r.ad_id = :id
-    ORDER BY r.created_at DESC
-";
+// Получаем информацию о текущем пользователе
+$currentUser = null;
+$isAuthor = false;
+$hasResponded = false;
 
+if (!empty($_SESSION['user_id'])) {
+    try {
+        $userStmt = $pdo->prepare('SELECT id, name, email, phone FROM users WHERE id = ? LIMIT 1');
+        $userStmt->execute([$_SESSION['user_id']]);
+        $currentUser = $userStmt->fetch(PDO::FETCH_ASSOC);
+        
+        // Проверяем, является ли пользователь автором объявления
+        if ($currentUser && isset($ad['user_id']) && (int)$ad['user_id'] === (int)$currentUser['id']) {
+            $isAuthor = true;
+        }
+        
+        // Проверяем, откликался ли пользователь на это объявление
+        if ($currentUser && !$isAuthor) {
+            $checkStmt = $pdo->prepare('SELECT id FROM responses WHERE ad_id = ? AND user_id = ? LIMIT 1');
+            $checkStmt->execute([$id, $currentUser['id']]);
+            $hasResponded = (bool)$checkStmt->fetch();
+        }
+    } catch (PDOException $e) {
+        error_log("Ошибка при получении пользователя: " . $e->getMessage());
+    }
+}
 
-$responses_stmt = $pdo->prepare($responses_sql);
-$responses_stmt->bindParam(':id', $id, PDO::PARAM_INT);
-$responses_stmt->execute();
-$responses = $responses_stmt->fetchAll(PDO::FETCH_ASSOC);
+// Получаем отклики на это объявление (только для автора)
+$responses = [];
+if ($isAuthor) {
+    $responses_sql = "
+        SELECT 
+            r.id,
+            r.ad_id,
+            r.name,
+            r.phone,
+            r.user_id,
+            r.created_at,
+            u.id AS user_id_from_join,
+            u.name AS user_name,
+            u.phone AS user_phone
+        FROM responses r
+        LEFT JOIN users u ON r.user_id = u.id
+        WHERE r.ad_id = :id
+        ORDER BY r.created_at DESC
+    ";
+
+    try {
+        $responses_stmt = $pdo->prepare($responses_sql);
+        $responses_stmt->bindParam(':id', $id, PDO::PARAM_INT);
+        $responses_stmt->execute();
+        $responses = $responses_stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log("Ошибка при получении откликов: " . $e->getMessage());
+        $responses = [];
+    }
+}
 ?>
 <html lang="ru">
 
@@ -97,8 +136,13 @@ $responses = $responses_stmt->fetchAll(PDO::FETCH_ASSOC);
                     </a>
                 </div>
                 <div class="auth-buttons">
-                    <button class="auth-btn" data-tab="register">Регистрация</button>
-                    <button class="auth-btn" data-tab="login">Вход</button>
+                    <?php if ($currentUser): ?>
+                        <span class="user-welcome">Здравствуйте, <?= e($currentUser['name']) ?></span>
+                        <a href="logout.php" class="auth-btn">Выход</a>
+                    <?php else: ?>
+                        <button class="auth-btn" data-tab="register">Регистрация</button>
+                        <button class="auth-btn" data-tab="login">Вход</button>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -119,39 +163,50 @@ $responses = $responses_stmt->fetchAll(PDO::FETCH_ASSOC);
                         <?php endif; ?>
                     </div>
 
-                    <!-- Откликнувшиеся (под фото) -->
-                    <div class="responses-left-block">
-                        <div class="responses-header">
-                            <h2 class="block-title">Откликнулись</h2>
+                    <!-- Откликнувшиеся (под фото) - только для автора -->
+                    <?php if ($isAuthor): ?>
+                        <div class="responses-left-block">
+                            <div class="responses-header">
+                                <h2 class="block-title">Откликнулись</h2>
+                                <?php if (!empty($responses)): ?>
+                                    <span class="responses-count"><?= count($responses) ?></span>
+                                <?php endif; ?>
+                            </div>
+
                             <?php if (!empty($responses)): ?>
-                                <span class="responses-count"><?= count($responses) ?></span>
+                                <div class="responses-list">
+                                    <?php foreach ($responses as $response): ?>
+                                        <div class="response-person">
+                                            <div class="response-person-name"><?= e($response['user_name'] ?? $response['name'] ?? '—') ?></div>
+                                            <div class="response-person-phone"><?= e($response['user_phone'] ?? $response['phone'] ?? '—') ?></div>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php else: ?>
+                                <div class="no-responses">
+                                    Пока никто не откликнулся.
+                                </div>
                             <?php endif; ?>
                         </div>
-
-                        <?php if (!empty($responses)): ?>
-                            <div class="responses-list">
-                                <?php foreach ($responses as $response): ?>
-                                    <div class="response-person">
-                                        <div class="response-person-name"><?= e($response['user_name'] ?? $response['name'] ?? '—') ?></div>
-                                        <div class="response-person-phone"><?= e($response['user_phone'] ?? $response['phone'] ?? '—') ?></div>
-                                        </div>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
-                        <?php else: ?>
-                            <div class="no-responses">
-                                Пока никто не откликнулся. Будьте первым!
-                            </div>
-                        <?php endif; ?>
-                    </div>
+                    <?php endif; ?>
                 </div>
 
                 <!-- Правая колонка: вся информация -->
                 <div class="detail-info-column">
+                    <?php if (isset($_GET['success'])): ?>
+                        <div style="color: green; margin-bottom: 20px; padding: 12px; background: #e6ffe6; border-radius: 8px;">
+                            ✅ Вы успешно откликнулись на объявление!
+                        </div>
+                    <?php endif; ?>
+                    <?php if (isset($_GET['error'])): ?>
+                        <div style="color: red; margin-bottom: 20px; padding: 12px; background: #ffe6e6; border-radius: 8px;">
+                            <?= e($_GET['error']) ?>
+                        </div>
+                    <?php endif; ?>
                     <!-- Верхний блок: цена + кнопка назад -->
                     <div class="detail-top-block">
                         <div class="price-block">
-                            <div class="ad-price-detail"><?= number_format($ad['ads_price'], 0, '', ' ') ?> ₽</div>
+                            <div class="ad-price-detail"><?= isset($ad['ads_price']) && is_numeric($ad['ads_price']) ? number_format((int)$ad['ads_price'], 0, '', ' ') : '0' ?> ₽</div>
                             <a href="index.php" class="back-to-list-link">
                                 ← Назад к списку
                             </a>
@@ -164,19 +219,32 @@ $responses = $responses_stmt->fetchAll(PDO::FETCH_ASSOC);
                     <!-- Контакт автора (в одной строке) -->
                     <div class="author-contact-block">
                         <div class="author-contact-line">
-                            <?php if (!empty($_SESSION['user_id'])): ?>
-                                <span class="author-phone"><?= e($ad['user_phone'] ?? $ad['phone'] ?? '—') ?></span>
-                                <span class="author-name"><?= e($ad['user_name'] ?? $ad['name'] ?? '—') ?></span>
+                            <?php if ($currentUser): ?>
+                                <span class="author-phone"><?= e($ad['user_phone'] ?? '—') ?></span>
+                                <span class="author-name"><?= e($ad['user_name'] ?? '—') ?></span>
                             <?php else: ?>
-                                <a href="#" onclick="openModal('login')">Войдите, чтобы увидеть контакты продавца</a>
+                                <a href="#" onclick="openModal('login'); return false;">Войдите, чтобы увидеть контакты продавца</a>
                             <?php endif; ?>
                         </div>
                     </div>
 
-                    <!-- ОДНА КНОПКА ОТКЛИКА -->
-                    <button class="respond-main-btn" id="respondButton" data-ad-id="<?= $id ?>">
-                        Откликнуться на объявление
-                    </button>
+                    <!-- Кнопка отклика - только для авторизованных, не автора, и не откликавшихся -->
+                    <?php if ($currentUser && !$isAuthor && !$hasResponded): ?>
+                        <form method="post" action="respond.php" style="display: inline;">
+                            <input type="hidden" name="ad_id" value="<?= $id ?>">
+                            <button type="submit" class="respond-main-btn">
+                                Откликнуться на объявление
+                            </button>
+                        </form>
+                    <?php elseif ($currentUser && !$isAuthor && $hasResponded): ?>
+                        <button class="respond-main-btn responded" disabled>
+                            ✓ Вы откликнулись на объявление
+                        </button>
+                    <?php elseif (!$currentUser): ?>
+                        <a href="#" onclick="openModal('login'); return false;" class="respond-main-btn" style="text-decoration: none; display: inline-block;">
+                            Войдите, чтобы откликнуться
+                        </a>
+                    <?php endif; ?>
 
                     <!-- Описание (только описание, без характеристик) -->
                     <div class="description-block">
@@ -260,52 +328,10 @@ $responses = $responses_stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </div>
 
-    <!-- Скрипты -->
+    <!-- Скрипты для модального окна (только если пользователь не авторизован) -->
+    <?php if (!$currentUser): ?>
     <script>
-        // Инициализация для детальной страницы
         document.addEventListener('DOMContentLoaded', function () {
-            console.log('Detail page loaded');
-
-            // Проверяем пользователя
-            const userData = localStorage.getItem('currentUser');
-            if (userData) {
-                try {
-                    const user = JSON.parse(userData);
-                    console.log('User found:', user);
-                    // Обновляем хедер если пользователь есть
-                    updateHeader(user);
-                } catch (e) {
-                    console.error('Error parsing user data:', e);
-                }
-            }
-
-            // Инициализируем кнопку отклика
-            const respondBtn = document.getElementById('respondButton');
-            if (respondBtn) {
-                console.log('Respond button found');
-
-                // Получаем ID объявления из URL или атрибута
-                let adId = respondBtn.getAttribute('data-ad-id');
-                if (!adId) {
-                    // Извлекаем из URL
-                    const urlParams = new URLSearchParams(window.location.search);
-                    adId = urlParams.get('id');
-                }
-
-                if (adId) {
-                    console.log('Ad ID:', adId);
-                    // Обновляем состояние кнопки
-                    updateResponseButton(adId);
-
-                    // Добавляем обработчик
-                    respondBtn.addEventListener('click', function () {
-                        console.log('Respond button clicked');
-                        handleResponseClick(adId);
-                    });
-                }
-            }
-
-            // Инициализируем модальное окно авторизации
             const authButtons = document.querySelectorAll('.auth-btn[data-tab]');
             authButtons.forEach(btn => {
                 btn.addEventListener('click', function (e) {
@@ -315,12 +341,10 @@ $responses = $responses_stmt->fetchAll(PDO::FETCH_ASSOC);
                 });
             });
 
-            // Закрытие модального окна
             document.querySelectorAll('.close-btn, .modal-backdrop').forEach(btn => {
                 btn.addEventListener('click', closeModal);
             });
 
-            // Переключение вкладок
             document.querySelectorAll('.auth-tab').forEach(tab => {
                 tab.addEventListener('click', function () {
                     const tabId = this.id;
@@ -328,7 +352,6 @@ $responses = $responses_stmt->fetchAll(PDO::FETCH_ASSOC);
                 });
             });
 
-            // Обработка форм
             const registerForm = document.getElementById('registerFormElement');
             if (registerForm) {
                 registerForm.addEventListener('submit', handleRegister);
@@ -339,7 +362,6 @@ $responses = $responses_stmt->fetchAll(PDO::FETCH_ASSOC);
                 loginForm.addEventListener('submit', handleLogin);
             }
 
-            // Закрытие по Escape
             document.addEventListener('keydown', function (e) {
                 if (e.key === 'Escape') {
                     closeModal();
@@ -347,140 +369,22 @@ $responses = $responses_stmt->fetchAll(PDO::FETCH_ASSOC);
             });
         });
 
-        // Проверка, откликнулся ли пользователь
-        function checkUserResponse(adId) {
-            const respondedAds = JSON.parse(localStorage.getItem('respondedAds') || '[]');
-            console.log('Checked responses for ad', adId, ':', respondedAds.includes(adId.toString()));
-            return respondedAds.includes(adId.toString());
-        }
-
-        // Обновление кнопки отклика
-        function updateResponseButton(adId) {
-            const button = document.getElementById('respondButton');
-            if (!button) return;
-
-            console.log('Updating button for ad:', adId);
-
-            if (checkUserResponse(adId)) {
-                // Пользователь уже откликнулся
-                button.innerHTML = '✓ Вы откликнулись на объявление';
-                button.classList.add('responded');
-                button.disabled = true;
-                console.log('Button updated to responded state');
-            } else {
-                // Пользователь еще не откликался
-                button.innerHTML = 'Откликнуться на объявление';
-                button.classList.remove('responded');
-                button.disabled = false;
-                console.log('Button updated to normal state');
-            }
-        }
-
-        // Обработка клика по кнопке отклика
-        function handleResponseClick(adId) {
-            console.log('Handling response for ad:', adId);
-
-            const userData = localStorage.getItem('currentUser');
-            if (!userData) {
-                alert('Для отклика необходимо войти в систему');
-                openModal('login');
-                return;
-            }
-
-            try {
-                const user = JSON.parse(userData);
-
-                // Проверяем, не откликался ли уже
-                if (checkUserResponse(adId)) {
-                    alert('Вы уже откликнулись на это объявление');
-                    return;
-                }
-
-                // Получаем кнопку для анимации
-                const button = document.getElementById('respondButton');
-
-                // Добавляем анимацию успеха
-                button.classList.add('success-animation');
-
-                // Сохраняем отклик
-                const respondedAds = JSON.parse(localStorage.getItem('respondedAds') || '[]');
-                respondedAds.push(adId.toString());
-                localStorage.setItem('respondedAds', JSON.stringify(respondedAds));
-
-                console.log('Response saved for ad:', adId, 'by user:', user.name);
-
-                // Обновляем кнопку через небольшую задержку для плавного перехода
-                setTimeout(() => {
-                    updateResponseButton(adId);
-                    button.classList.remove('success-animation');
-                }, 500);
-
-                // Показываем сообщение
-                setTimeout(() => {
-                    alert('✅ Вы успешно откликнулись на объявление!\n' +
-                        'Имя: ' + user.name + '\n' +
-                        'Телефон: ' + user.phone);
-                }, 600);
-
-                // Обновляем список откликов на странице
-                updateResponsesList(user);
-
-            } catch (e) {
-                console.error('Error handling response:', e);
-                alert('Ошибка при обработке отклика');
-            }
-        }
-
-        // Обновление списка откликов на странице
-        function updateResponsesList(user) {
-            const responsesList = document.querySelector('.responses-list');
-            if (!responsesList) return;
-
-            const noResponses = document.querySelector('.no-responses');
-            if (noResponses) {
-                noResponses.style.display = 'none';
-            }
-
-            // Создаем новый элемент отклика
-            const responseDiv = document.createElement('div');
-            responseDiv.className = 'response-person';
-            responseDiv.innerHTML = `
-                <div class="response-person-name">${user.name}</div>
-                <div class="response-person-phone">${user.phone}</div>
-            `;
-
-            responsesList.appendChild(responseDiv);
-
-            // Обновляем счетчик
-            const countSpan = document.querySelector('.responses-count');
-            if (countSpan) {
-                const currentCount = parseInt(countSpan.textContent) || 0;
-                countSpan.textContent = currentCount + 1;
-            }
-        }
-
-        // Глобальные функции для модального окна
         function openModal(tab = 'register') {
-            console.log('Opening modal for tab:', tab);
             const modal = document.getElementById('authModal');
             if (!modal) return;
-
             modal.style.display = 'block';
             document.body.style.overflow = 'hidden';
             switchTab(tab);
         }
 
         function closeModal() {
-            console.log('Closing modal');
             const modal = document.getElementById('authModal');
             if (!modal) return;
-
             modal.style.display = 'none';
             document.body.style.overflow = '';
         }
 
         function switchTab(tab) {
-            console.log('Switching to tab:', tab);
             const registerForm = document.getElementById('registerForm');
             const loginForm = document.getElementById('loginForm');
             const registerTabBtn = document.getElementById('registerTabBtn');
@@ -501,9 +405,26 @@ $responses = $responses_stmt->fetchAll(PDO::FETCH_ASSOC);
             }
         }
 
+        function validateName(name) {
+            return /^[а-яА-ЯёЁ\s\-]+$/.test(name);
+        }
+
+        function validateEmail(email) {
+            return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+        }
+
+        function validatePhone(phone) {
+            const cleaned = phone.replace(/\D/g, '');
+            return cleaned.length === 11 && (cleaned[0] === '7' || cleaned[0] === '8');
+        }
+
+        function validatePassword(password) {
+            if (password.length < 6) return false;
+            return !/^\d+$/.test(password);
+        }
+
         function handleRegister(event) {
             event.preventDefault();
-            console.log('Handling registration');
 
             const name = document.getElementById('regName')?.value.trim();
             const email = document.getElementById('regEmail')?.value.trim();
@@ -512,133 +433,63 @@ $responses = $responses_stmt->fetchAll(PDO::FETCH_ASSOC);
             const confirmPassword = document.getElementById('regConfirmPassword')?.value;
             const agree = document.getElementById('agree')?.checked;
 
-            // Простая валидация
             if (!name || !email || !phone || !password || !confirmPassword) {
                 alert('Все поля обязательны для заполнения');
-                return;
+                return false;
+            }
+
+            if (!validateName(name)) {
+                alert('Имя может содержать только русские буквы, пробелы и дефисы');
+                return false;
+            }
+
+            if (!validateEmail(email)) {
+                alert('Введите корректный email');
+                return false;
+            }
+
+            if (!validatePhone(phone)) {
+                alert('Введите корректный мобильный телефон');
+                return false;
+            }
+
+            if (!validatePassword(password)) {
+                alert('Пароль должен быть не менее 6 символов и не состоять только из цифр');
+                return false;
             }
 
             if (password !== confirmPassword) {
                 alert('Пароли не совпадают');
-                return;
-            }
-
-            if (password.length < 6) {
-                alert('Пароль должен быть не менее 6 символов');
-                return;
+                return false;
             }
 
             if (!agree) {
                 alert('Необходимо согласие на обработку персональных данных');
-                return;
+                return false;
             }
 
-            // Сохраняем пользователя
-            const user = {
-                id: Date.now(),
-                name: name,
-                email: email,
-                phone: phone,
-                registeredAt: new Date().toISOString()
-            };
-
-            localStorage.setItem('currentUser', JSON.stringify(user));
-            console.log('User saved:', user);
-
-            // Обновляем хедер
-            updateHeader(user);
-
-            // Закрываем модальное окно
-            closeModal();
-
-            // Показываем уведомление
-            setTimeout(() => {
-                alert('Регистрация прошла успешно! Добро пожаловать, ' + name + '!');
-            }, 100);
+            return true;
         }
 
         function handleLogin(event) {
             event.preventDefault();
-            console.log('Handling login');
 
             const email = document.getElementById('loginEmail')?.value.trim();
             const password = document.getElementById('loginPassword')?.value;
 
             if (!email || !password) {
                 alert('Все поля обязательны для заполнения');
-                return;
+                return false;
             }
 
-            // Простая проверка для демо
-            if (password.length < 6) {
-                alert('Пароль должен быть не менее 6 символов');
-                return;
+            if (!validateEmail(email)) {
+                alert('Введите корректный email');
+                return false;
             }
 
-            // Создаем или загружаем пользователя
-            let user = JSON.parse(localStorage.getItem('currentUser') || 'null');
-
-            if (!user) {
-                user = {
-                    id: Date.now(),
-                    name: email.split('@')[0],
-                    email: email,
-                    phone: '+7 (999) 999-99-99',
-                    loggedInAt: new Date().toISOString()
-                };
-            } else if (user.email !== email) {
-                // Если email отличается, обновляем его
-                user.email = email;
-                user.name = email.split('@')[0];
-            }
-
-            localStorage.setItem('currentUser', JSON.stringify(user));
-            console.log('User logged in:', user);
-
-            // Обновляем хедер
-            updateHeader(user);
-
-            // Закрываем модальное окно
-            closeModal();
-
-            // Показываем уведомление
-            setTimeout(() => {
-                alert('Вход выполнен успешно!');
-            }, 100);
-        }
-
-        function updateHeader(user) {
-            const authButtons = document.querySelector('.auth-buttons');
-            if (!authButtons) return;
-
-            console.log('Updating header for user:', user ? user.name : 'none');
-
-            if (user) {
-                authButtons.innerHTML = `
-                    <span class="user-welcome">Здравствуйте, ${user.name}</span>
-                    <button class="auth-btn" onclick="logout()">Выход</button>
-                `;
-            } else {
-                authButtons.innerHTML = `
-                    <button class="auth-btn" data-tab="register">Регистрация</button>
-                    <button class="auth-btn" data-tab="login">Вход</button>
-                `;
-            }
-        }
-
-        function logout() {
-            if (confirm('Вы уверены, что хотите выйти?')) {
-                localStorage.removeItem('currentUser');
-                localStorage.removeItem('respondedAds'); // Также очищаем отклики при выходе
-                updateHeader(null);
-                alert('Вы вышли из системы');
-
-                // Обновляем страницу
-                setTimeout(() => {
-                    window.location.reload();
-                }, 500);
-            }
+            return true;
         }
     </script>
+    <?php endif; ?>
 </body>
 </html>
