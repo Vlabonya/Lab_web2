@@ -1,107 +1,74 @@
 <?php
 declare(strict_types=1);
 session_start();
+header('Content-Type: application/json; charset=utf-8');
+
 require_once 'db_connect.php';
 
-// Функции валидации
-function validateName(string $name): bool {
-    return preg_match('/^[а-яА-ЯёЁ\s\-]+$/u', $name) === 1;
+function error($field, $msg) {
+    echo json_encode([
+        'success' => false,
+        'errors' => [$field => $msg]
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
-function validateEmail(string $email): bool {
-    return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
-}
-
-function validatePhone(string $phone): bool {
-    $cleaned = preg_replace('/\D/', '', $phone);
-    return strlen($cleaned) === 11 && ($cleaned[0] === '7' || $cleaned[0] === '8');
-}
-
-function validatePassword(string $password): bool {
-    if (strlen($password) < 6) {
-        return false;
+$required = ['name', 'email', 'phone', 'password', 'confirm_password'];
+foreach ($required as $field) {
+    if (empty($_POST[$field])) {
+        error($field, "Поле обязательно");
     }
-    // Пароль не может состоять только из цифр
-    return !preg_match('/^\d+$/', $password);
 }
 
-$name = trim($_POST['name'] ?? '');
-$email = trim($_POST['email'] ?? '');
-$phone = trim($_POST['phone'] ?? '');
-$password = $_POST['password'] ?? '';
-$confirmPassword = $_POST['confirm_password'] ?? $_POST['regConfirmPassword'] ?? '';
-$agree = isset($_POST['agree']);
+// ДАННЫЕ
+$name = trim($_POST['name']);
+$email = trim($_POST['email']);
+$phone = trim($_POST['phone']);
+$password = $_POST['password'];
+$confirm = $_POST['confirm_password'];
 
-$errors = [];
-
-// Валидация полей
-if (empty($name)) {
-    $errors[] = 'Имя обязательно для заполнения';
-} elseif (!validateName($name)) {
-    $errors[] = 'Имя может содержать только русские буквы, пробелы и дефисы';
+if (!preg_match('/^[а-яА-ЯёЁ\s-]+$/u', $name)) {
+    error('name', 'Имя может содержать только русские буквы, пробелы и дефисы');
 }
 
-if (empty($email)) {
-    $errors[] = 'Email обязателен для заполнения';
-} elseif (!validateEmail($email)) {
-    $errors[] = 'Введите корректный email';
+if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    error('email', 'Некорректный email');
 }
 
-if (empty($phone)) {
-    $errors[] = 'Телефон обязателен для заполнения';
-} elseif (!validatePhone($phone)) {
-    $errors[] = 'Введите корректный мобильный телефон';
+$cleanPhone = preg_replace('/\D/', '', $phone);
+if (strlen($cleanPhone) !== 11) {
+    error('phone', 'Телефон должен содержать 11 цифр');
 }
 
-if (empty($password)) {
-    $errors[] = 'Пароль обязателен для заполнения';
-} elseif (!validatePassword($password)) {
-    $errors[] = 'Пароль должен быть не менее 6 символов и не состоять только из цифр';
+if (strlen($password) < 6) {
+    error('password', 'Пароль должен быть не меньше 6 символов');
 }
 
-if ($password !== $confirmPassword) {
-    $errors[] = 'Пароли не совпадают';
+if ($password !== $confirm) {
+    error('confirm_password', 'Пароли не совпадают');
 }
 
-if (!$agree) {
-    $errors[] = 'Необходимо согласие на обработку персональных данных';
+// ПРОВЕРКА EMAIL НА УНИКАЛЬНОСТЬ
+$stmt = $pdo->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
+$stmt->execute([$email]);
+if ($stmt->fetch()) {
+    error('email', 'Этот email уже зарегистрирован');
 }
 
-// Если есть ошибки, возвращаем на форму
-if (!empty($errors)) {
-    $errorMsg = implode('. ', $errors);
-    header('Location: index.php?reg_error=' . urlencode($errorMsg));
-    exit;
-}
+// ХЕШ ПАРОЛЯ
+$hash = password_hash($password, PASSWORD_DEFAULT);
 
-// Проверяем существование email
-try {
-    $stmt = $pdo->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
-    $stmt->execute([$email]);
-    if ($stmt->fetch()) {
-        header('Location: index.php?reg_error=' . urlencode('Пользователь с таким email уже зарегистрирован'));
-        exit;
-    }
-} catch (PDOException $e) {
-    error_log("Ошибка при проверке email: " . $e->getMessage());
-    header('Location: index.php?reg_error=' . urlencode('Ошибка при регистрации'));
-    exit;
-}
+// ЗАПИСЬ В БД
+$stmt = $pdo->prepare("
+    INSERT INTO users (name, email, phone, password_hash)
+    VALUES (?, ?, ?, ?)
+");
 
-// Создаём пользователя
-try {
-    $hash = password_hash($password, PASSWORD_DEFAULT);
-    $insert = $pdo->prepare('INSERT INTO users (name, email, phone, password_hash) VALUES (?, ?, ?, ?)');
-    $insert->execute([$name, $email, $phone, $hash]);
-    $userId = (int)$pdo->lastInsertId();
+$stmt->execute([$name, $email, $phone, $hash]);
 
-    // Сохраняем сессию
-    $_SESSION['user_id'] = $userId;
+$userId = (int)$pdo->lastInsertId();
+$_SESSION['user_id'] = $userId;
 
-    header('Location: index.php');
-    exit;
-} catch (PDOException $e) {
-    error_log("Ошибка при регистрации: " . $e->getMessage());
-    header('Location: index.php?reg_error=' . urlencode('Ошибка при регистрации'));
-    exit;
-}
+echo json_encode([
+    'success' => true
+], JSON_UNESCAPED_UNICODE);

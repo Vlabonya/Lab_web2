@@ -22,7 +22,7 @@ if (!empty($_SESSION['user_id'])) {
 
 // Постраничный вывод - получаем первые 10 записей
 $limit = 10;
-$sql = "SELECT * FROM ads ORDER BY id DESC LIMIT :limit";
+$sql = "SELECT * FROM ads ORDER BY id DESC LIMIT :limit"; // сортировка, ASC - сначала старые (ID 1,2,3..), DESC - новые
 try {
     $stmt = $pdo->prepare($sql);
     $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
@@ -161,7 +161,7 @@ try {
                             <?= e($_GET['reg_error']) ?>
                         </div>
                     <?php endif; ?>
-                    <form class="auth-form" id="registerFormElement" method="post" action="register.php" onsubmit="return handleRegister(event)">
+                    <form class="auth-form" id="registerFormElement" onsubmit="handleRegister(event)">
                         <div class="form-row">
                             <input name="name" type="text" placeholder="Ваше имя" required class="form-input" id="regName">
                         </div>
@@ -194,7 +194,7 @@ try {
                             <?= e($_GET['login_error']) ?>
                         </div>
                     <?php endif; ?>
-                    <form class="auth-form" id="loginFormElement" method="post" action="login.php" onsubmit="return handleLogin(event)">
+                    <form class="auth-form" id="loginFormElement" onsubmit="handleLogin(event)">
                         <div class="form-row">
                             <input name="email" type="email" placeholder="Email" required class="form-input" id="loginEmail">
                         </div>
@@ -240,17 +240,6 @@ try {
                     switchTab(tabId === 'registerTabBtn' ? 'register' : 'login');
                 });
             });
-
-            // Обработка форм
-            const registerForm = document.getElementById('registerFormElement');
-            if (registerForm) {
-                registerForm.addEventListener('submit', handleRegister);
-            }
-
-            const loginForm = document.getElementById('loginFormElement');
-            if (loginForm) {
-                loginForm.addEventListener('submit', handleLogin);
-            }
 
             // Закрытие по Escape
             document.addEventListener('keydown', function (e) {
@@ -332,131 +321,114 @@ try {
             return !/^\d+$/.test(password);
         }
 
-        function handleRegister(event) {
+        async function handleRegister(event) {
             event.preventDefault();
 
-            const name = document.getElementById('regName')?.value.trim();
-            const email = document.getElementById('regEmail')?.value.trim();
-            const phone = document.getElementById('regPhone')?.value.trim();
-            const password = document.getElementById('regPassword')?.value;
-            const confirmPassword = document.getElementById('regConfirmPassword')?.value;
-            const agree = document.getElementById('agree')?.checked;
+            const form = document.getElementById('registerFormElement');
+            const formData = new FormData(form);
 
-            // Валидация
-            if (!name || !email || !phone || !password || !confirmPassword) {
-                alert('Все поля обязательны для заполнения');
+            const resp = await fetch('register.php', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await resp.json();
+
+            if (data.success) {
+                location.reload();
                 return;
             }
 
-            if (!validateName(name)) {
-                alert('Имя может содержать только русские буквы, пробелы и дефисы');
-                return;
+            // обработка ошибок
+            if (data.errors) {
+                const field = Object.keys(data.errors)[0];
+                alert(data.errors[field]);
             }
-
-            if (!validateEmail(email)) {
-                alert('Введите корректный email');
-                return;
-            }
-
-            if (!validatePhone(phone)) {
-                alert('Введите корректный мобильный телефон');
-                return;
-            }
-
-            if (!validatePassword(password)) {
-                alert('Пароль должен быть не менее 6 символов и не состоять только из цифр');
-                return;
-            }
-
-            if (password !== confirmPassword) {
-                alert('Пароли не совпадают');
-                return;
-            }
-
-            if (!agree) {
-                alert('Необходимо согласие на обработку персональных данных');
-                return;
-            }
-
-            // Отправка формы на сервер
-            return true;
         }
 
-        function handleLogin(event) {
+        async function handleLogin(event) {
             event.preventDefault();
 
-            const email = document.getElementById('loginEmail')?.value.trim();
-            const password = document.getElementById('loginPassword')?.value;
+            const form = document.getElementById('loginFormElement');
+            const formData = new FormData(form);
 
-            if (!email || !password) {
-                alert('Все поля обязательны для заполнения');
+            const resp = await fetch('login.php', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await resp.json();
+
+            if (data.success) {
+                location.reload();
                 return;
             }
 
-            if (!validateEmail(email)) {
-                alert('Введите корректный email');
-                return;
+            if (data.errors) {
+                const field = Object.keys(data.errors)[0];
+                alert(data.errors[field]);
             }
-
-            // Отправка формы на сервер
-            return true;
         }
+
 
         // Постраничный вывод
         function loadMoreAds() {
             const btn = document.getElementById('showMoreBtn');
-            if (!btn) return;
+            const grid = document.getElementById('adsGrid');
+            if (!btn || !grid) return;
 
             const lastId = btn.getAttribute('data-last-id');
-            if (!lastId) return;
+
+            const url = lastId
+                ? `load_more.php?last_id=${encodeURIComponent(lastId)}`
+                : `load_more.php`;
 
             btn.disabled = true;
             btn.textContent = 'Загрузка...';
 
-            fetch(`load_more.php?last_id=${lastId}`)
-                .then(response => response.text())
-                .then(html => {
-                    if (html.trim()) {
-                        const grid = document.getElementById('adsGrid');
-                        if (grid) {
-                            grid.insertAdjacentHTML('beforeend', html);
-                            // Обновляем last_id из последнего элемента
-                            const cards = grid.querySelectorAll('.ad-card');
-                            if (cards.length > 0) {
-                                const lastCard = cards[cards.length - 1];
-                                const lastLink = lastCard.querySelector('a[href*="id="]');
-                                if (lastLink) {
-                                    const match = lastLink.href.match(/id=(\d+)/);
-                                    if (match) {
-                                        btn.setAttribute('data-last-id', match[1]);
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        btn.style.display = 'none';
+            fetch(url)
+                .then(r => r.json())
+                .then(data => {
+
+                    if (!data.success) {
+                        btn.disabled = false;
+                        btn.textContent = 'Показать ещё';
+                        return;
                     }
-                    btn.disabled = false;
-                    btn.innerHTML = `
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e91e63" stroke-width="2">
-                            <path d="M6 9l6 6 6-6" />
-                        </svg>
-                        Показать ещё
-                    `;
+
+                    // Добавляем новые карточки
+                    data.ads.forEach(ad => {
+                        const card = document.createElement('div');
+                        card.className = 'ad-card';
+                        card.innerHTML = `
+                            <div class="ad-img">
+                                <a href="detail.php?id=${ad.id}">
+                                    <img src="images/${ad.ads_photo}" class="ad-image">
+                                </a>
+                            </div>
+                            <div class="ad-price">${ad.ads_price} ₽</div>
+                            <div class="ad-title">${ad.ads_title}</div>
+                        `;
+                        grid.appendChild(card);
+                    });
+
+                    // Обновляем last_id
+                    if (data.last_id) {
+                        btn.setAttribute('data-last-id', data.last_id);
+                    }
+
+                    if (!data.has_more) {
+                        btn.style.display = 'none';
+                    } else {
+                        btn.disabled = false;
+                        btn.textContent = 'Показать ещё';
+                    }
                 })
-                .catch(error => {
-                    console.error('Ошибка загрузки:', error);
-                    alert('Ошибка при загрузке объявлений');
+                .catch(() => {
                     btn.disabled = false;
-                    btn.innerHTML = `
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e91e63" stroke-width="2">
-                            <path d="M6 9l6 6 6-6" />
-                        </svg>
-                        Показать ещё
-                    `;
+                    btn.textContent = 'Показать ещё';
                 });
         }
     </script>
 </body>
-
 </html>
