@@ -26,6 +26,7 @@ $sql = "
         ads.ads_photo,
         ads.ads_price,
         ads.created_at,
+        ads.status,
         users.id AS user_id,
         users.name AS user_name,
         users.phone AS user_phone,
@@ -61,7 +62,7 @@ $hasResponded = false;
 
 if (!empty($_SESSION['user_id'])) {
     try {
-        $userStmt = $pdo->prepare('SELECT id, name, email, phone FROM users WHERE id = ? LIMIT 1');
+        $userStmt = $pdo->prepare('SELECT id, name, email, phone, role FROM users WHERE id = ? LIMIT 1');
         $userStmt->execute([$_SESSION['user_id']]);
         $currentUser = $userStmt->fetch(PDO::FETCH_ASSOC);
         
@@ -81,35 +82,59 @@ if (!empty($_SESSION['user_id'])) {
     }
 }
 
-// Получаем отклики на это объявление (только для автора)
-$responses = [];
-if ($isAuthor) {
-    $responses_sql = "
-        SELECT 
-            r.id,
-            r.ad_id,
-            r.name,
-            r.phone,
-            r.user_id,
-            r.created_at,
-            u.id AS user_id_from_join,
-            u.name AS user_name,
-            u.phone AS user_phone
-        FROM responses r
-        LEFT JOIN users u ON r.user_id = u.id
-        WHERE r.ad_id = :id
-        ORDER BY r.created_at DESC
-    ";
+// Проверяем, является ли пользователь администратором
+$isAdmin = $currentUser && ($currentUser['role'] ?? 'user') === 'admin';
 
-    try {
-        $responses_stmt = $pdo->prepare($responses_sql);
-        $responses_stmt->bindParam(':id', $id, PDO::PARAM_INT);
-        $responses_stmt->execute();
-        $responses = $responses_stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (PDOException $e) {
-        error_log("Ошибка при получении откликов: " . $e->getMessage());
-        $responses = [];
+// Обработка действий модерации (только для администраторов)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAdmin && isset($_POST['action']) && isset($_POST['ad_id'])) {
+    $adId = (int)$_POST['ad_id'];
+    $action = $_POST['action'];
+    
+    if (in_array($action, ['approve', 'reject']) && $adId === $id) {
+        try {
+            $status = $action === 'approve' ? 'approved' : 'rejected';
+            $update = $pdo->prepare('UPDATE ads SET status = ? WHERE id = ?');
+            $update->execute([$status, $adId]);
+            
+            // Обновляем данные объявления
+            $ad['status'] = $status;
+            
+            // Редирект для обновления страницы
+            header('Location: detail.php?id=' . $id);
+            exit;
+        } catch (PDOException $e) {
+            error_log("Ошибка при модерации объявления: " . $e->getMessage());
+        }
     }
+}
+
+// Получаем отклики на это объявление (для отображения списка)
+$responses = [];
+$responses_sql = "
+    SELECT 
+        r.id,
+        r.ad_id,
+        r.name,
+        r.phone,
+        r.user_id,
+        r.created_at,
+        u.id AS user_id_from_join,
+        u.name AS user_name,
+        u.phone AS user_phone
+    FROM responses r
+    LEFT JOIN users u ON r.user_id = u.id
+    WHERE r.ad_id = :id
+    ORDER BY r.created_at DESC
+";
+
+try {
+    $responses_stmt = $pdo->prepare($responses_sql);
+    $responses_stmt->bindParam(':id', $id, PDO::PARAM_INT);
+    $responses_stmt->execute();
+    $responses = $responses_stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log("Ошибка при получении откликов: " . $e->getMessage());
+    $responses = [];
 }
 ?>
 <html lang="ru">
@@ -123,6 +148,9 @@ if ($isAuthor) {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+
+    
 </head>
 
 <body class="detail-page">
@@ -137,6 +165,9 @@ if ($isAuthor) {
                 </div>
                 <div class="auth-buttons">
                     <?php if ($currentUser): ?>
+                        <?php if ($isAdmin): ?>
+                            <a href="admin.php" class="auth-btn">Панель модерации</a>
+                        <?php endif; ?>
                         <span class="user-welcome">Здравствуйте, <?= e($currentUser['name']) ?></span>
                         <a href="logout.php" class="auth-btn">Выход</a>
                     <?php else: ?>
@@ -154,8 +185,19 @@ if ($isAuthor) {
                 <!-- Левая колонка: фото + отклики -->
                 <div class="detail-left-column">
                     <div class="ad-photo-container">
-                        <?php if (!empty($ad['ads_photo'])): ?>
-                            <img src="images/<?= e(basename($ad['ads_photo'])) ?>"
+                        <?php 
+                        $photo = !empty($ad['ads_photo']) ? trim($ad['ads_photo']) : '';
+                        if ($photo) {
+                            // Если путь уже содержит /, используем как есть, иначе добавляем images/
+                            $photoPath = (strpos($photo, '/') !== false || strpos($photo, '\\') !== false) 
+                                ? e($photo) 
+                                : 'images/' . e(basename($photo));
+                        } else {
+                            $photoPath = '';
+                        }
+                        ?>
+                        <?php if ($photoPath): ?>
+                            <img src="<?= $photoPath ?>"
                                 alt="<?= e($ad['ads_title']) ?>"
                                 class="main-ad-photo">
                         <?php else: ?>
@@ -163,8 +205,8 @@ if ($isAuthor) {
                         <?php endif; ?>
                     </div>
 
-                    <!-- Откликнувшиеся (под фото) - только для автора -->
-                    <?php if ($isAuthor): ?>
+                    <!-- Откликнувшиеся (под фото) -->
+                    <?php if (!$isAdmin): ?>
                         <div class="responses-left-block">
                             <div class="responses-header">
                                 <h2 class="block-title">Откликнулись</h2>
@@ -193,11 +235,6 @@ if ($isAuthor) {
 
                 <!-- Правая колонка: вся информация -->
                 <div class="detail-info-column">
-                    <?php if (isset($_GET['success'])): ?>
-                        <div style="color: green; margin-bottom: 20px; padding: 12px; background: #e6ffe6; border-radius: 8px;">
-                            ✅ Вы успешно откликнулись на объявление!
-                        </div>
-                    <?php endif; ?>
                     <?php if (isset($_GET['error'])): ?>
                         <div style="color: red; margin-bottom: 20px; padding: 12px; background: #ffe6e6; border-radius: 8px;">
                             <?= e($_GET['error']) ?>
@@ -216,6 +253,28 @@ if ($isAuthor) {
                     <!-- Название объявления -->
                     <h1 class="ad-title-detail"><?= e($ad['ads_title']) ?></h1>
 
+                    <!-- Статус объявления для автора (кроме случаев, когда автор — админ) -->
+                    <?php if ($isAuthor && !$isAdmin): 
+                        $adStatus = $ad['status'] ?? 'pending';
+                        $statusText = '';
+                        $statusColor = '';
+                        if ($adStatus === 'approved') {
+                            $statusText = 'Одобрено';
+                            $statusColor = '#4CAF50';
+                        } elseif ($adStatus === 'rejected') {
+                            $statusText = 'Отклонено';
+                            $statusColor = '#f44336';
+                        } else {
+                            $statusText = 'На модерации';
+                            $statusColor = '#ff9800';
+                        }
+                    ?>
+                        <div style="margin-bottom: 16px; padding: 12px; background: #f9f9f9; border-radius: 8px; border-left: 4px solid <?= $statusColor ?>;">
+                            <span style="font-weight: 500; color: #333;">Статус: </span>
+                            <span style="color: <?= $statusColor ?>; font-weight: 600;"><?= $statusText ?></span>
+                        </div>
+                    <?php endif; ?>
+
                     <!-- Контакт автора (в одной строке) -->
                     <div class="author-contact-block">
                         <div class="author-contact-line">
@@ -228,27 +287,67 @@ if ($isAuthor) {
                         </div>
                     </div>
 
-                    <!-- Кнопка отклика - только для авторизованных, не автора, и не откликавшихся -->
-                    <?php if ($currentUser && !$isAuthor && !$hasResponded): ?>
-                        <form method="post" action="respond.php" style="display: inline;">
-                            <input type="hidden" name="ad_id" value="<?= $id ?>">
-                            <button type="submit" class="respond-main-btn">
-                                Откликнуться на объявление
+                    <!-- Блок модерации для администраторов (только если админ не является автором объявления) -->
+                    <?php if ($isAdmin && !$isAuthor): 
+                        $adStatus = $ad['status'] ?? 'pending';
+                    ?>
+                        <div style="margin-bottom: 20px; padding: 16px; background: #f9f9f9; border-radius: 12px; border-left: 4px solid <?= $adStatus === 'approved' ? '#4CAF50' : ($adStatus === 'rejected' ? '#f44336' : '#ff9800') ?>;">
+                            <div style="font-weight: 600; margin-bottom: 12px; color: #333;">Статус модерации: 
+                                <span style="color: <?= $adStatus === 'approved' ? '#4CAF50' : ($adStatus === 'rejected' ? '#f44336' : '#ff9800') ?>;">
+                                    <?= $adStatus === 'approved' ? 'Одобрено' : ($adStatus === 'rejected' ? 'Отклонено' : 'На модерации') ?>
+                                </span>
+                            </div>
+                            <?php if ($adStatus === 'pending'): ?>
+                                <div style="display: flex; gap: 12px;">
+                                    <form method="post" style="display: inline;" onsubmit="return confirm('Одобрить это объявление?');">
+                                        <input type="hidden" name="ad_id" value="<?= $id ?>">
+                                        <input type="hidden" name="action" value="approve">
+                                        <button type="submit" style="background: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 500;">Одобрить</button>
+                                    </form>
+                                    <form method="post" style="display: inline;" onsubmit="return confirm('Отклонить это объявление?');">
+                                        <input type="hidden" name="ad_id" value="<?= $id ?>">
+                                        <input type="hidden" name="action" value="reject">
+                                        <button type="submit" style="background: #f44336; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 500;">Отклонить</button>
+                                    </form>
+                                </div>
+                            <?php elseif ($adStatus === 'rejected'): ?>
+                                <form method="post" style="display: inline;" onsubmit="return confirm('Одобрить это объявление?');">
+                                    <input type="hidden" name="ad_id" value="<?= $id ?>">
+                                    <input type="hidden" name="action" value="approve">
+                                    <button type="submit" style="background: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 500;">Одобрить</button>
+                                </form>
+                            <?php else: ?>
+                                <form method="post" style="display: inline;" onsubmit="return confirm('Отклонить это объявление?');">
+                                    <input type="hidden" name="ad_id" value="<?= $id ?>">
+                                    <input type="hidden" name="action" value="reject">
+                                    <button type="submit" style="background: #f44336; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 500;">Отклонить</button>
+                                </form>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <!-- Кнопка отклика - только для авторизованных, не автора, и не откликавшихся, и не для администратора -->
+                    <?php if (!$isAdmin): ?>
+                        <?php if ($currentUser && !$isAuthor && !$hasResponded): ?>
+                            <form method="post" action="respond.php" style="display: inline;">
+                                <input type="hidden" name="ad_id" value="<?= $id ?>">
+                                <button type="submit" class="respond-main-btn">
+                                    Откликнуться на объявление
+                                </button>
+                            </form>
+                        <?php elseif ($currentUser && !$isAuthor && $hasResponded): ?>
+                            <button class="respond-main-btn responded" disabled>
+                                Вы откликнулись на объявление
                             </button>
-                        </form>
-                    <?php elseif ($currentUser && !$isAuthor && $hasResponded): ?>
-                        <button class="respond-main-btn responded" disabled>
-                            ✓ Вы откликнулись на объявление
-                        </button>
-                    <?php elseif (!$currentUser): ?>
-                        <a href="#" onclick="openModal('login'); return false;" class="respond-main-btn" style="text-decoration: none; display: inline-block;">
-                            Войдите, чтобы откликнуться
-                        </a>
+                        <?php elseif (!$currentUser): ?>
+                            <a href="#" onclick="openModal('login'); return false;" class="respond-main-btn" style="text-decoration: none; display: inline-block;">
+                                Войдите, чтобы откликнуться
+                            </a>
+                        <?php endif; ?>
                     <?php endif; ?>
 
                     <!-- Описание (только описание, без характеристик) -->
                     <div class="description-block">
-                        <h2 class="block-title">Описание</h2>
                         <div class="description-text">
                             <?= nl2br(e($ad['ads_description'])) ?>
                         </div>
@@ -269,7 +368,7 @@ if ($isAuthor) {
     </footer>
 
     <!-- Модальное окно авторизации (скрыто по умолчанию) -->
-    <div class="modal-overlay" id="authModal" style="display: none;">
+    <div class="modal-overlay" id="authModal">
         <div class="modal-backdrop" onclick="closeModal()"></div>
         <div class="modal">
             <div class="modal-content">
@@ -372,7 +471,8 @@ if ($isAuthor) {
         function openModal(tab = 'register') {
             const modal = document.getElementById('authModal');
             if (!modal) return;
-            modal.style.display = 'block';
+            modal.style.display = 'flex';
+            modal.classList.add('active');
             document.body.style.overflow = 'hidden';
             switchTab(tab);
         }
@@ -381,6 +481,7 @@ if ($isAuthor) {
             const modal = document.getElementById('authModal');
             if (!modal) return;
             modal.style.display = 'none';
+            modal.classList.remove('active');
             document.body.style.overflow = '';
         }
 

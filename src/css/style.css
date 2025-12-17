@@ -67,7 +67,7 @@ label {
   padding: 10px 20px;
   cursor: pointer;
   font-size: 16px;
-  color: #333;
+  color: #666;
   border-radius: 6px;
   transition: color 0.2s;
   display: inline-block;
@@ -228,7 +228,7 @@ label {
 }
 
 .submit-btn {
-  background: #e91e63;
+  background: #FF006B;
   color: white;
   border: none;
   padding: 16px;
@@ -305,10 +305,6 @@ label {
   width: 24px;     /* размер плюса */
   height: 24px;
   display: block;
-}
-
-.add-btn:hover {
-  background: #c2185b;
 }
 
 .main {
@@ -469,6 +465,10 @@ label {
   transform: translateY(2px);
 }
 
+.show-more-btn:hover svg path {
+  stroke: #fff;
+}
+
 .footer {
   padding: 32px 0;
   border-top: 1px solid #eee;
@@ -615,3 +615,4 @@ label {
   padding: 10px 0;
   display: inline-block;
 }
+

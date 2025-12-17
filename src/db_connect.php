@@ -7,7 +7,8 @@ try {
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 } catch (PDOException $exception) {
-    echo "Ошибка подключения к БД: " . $exception->getMessage();
-    die();
+    error_log("DB error: " . $exception->getMessage());
+    http_response_code(500);
+    exit("DB error");
 }
 ?>

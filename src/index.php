@@ -12,7 +12,7 @@ function e($v) {
 $currentUser = null;
 if (!empty($_SESSION['user_id'])) {
     try {
-        $userStmt = $pdo->prepare('SELECT id, name, email, phone FROM users WHERE id = ? LIMIT 1');
+        $userStmt = $pdo->prepare('SELECT id, name, email, phone, role FROM users WHERE id = ? LIMIT 1');
         $userStmt->execute([$_SESSION['user_id']]);
         $currentUser = $userStmt->fetch(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
@@ -20,9 +20,9 @@ if (!empty($_SESSION['user_id'])) {
     }
 }
 
-// Постраничный вывод - получаем первые 10 записей
+// Постраничный вывод - получаем первые 10 записей (только одобренные)
 $limit = 10;
-$sql = "SELECT * FROM ads ORDER BY id DESC LIMIT :limit"; // сортировка, ASC - сначала старые (ID 1,2,3..), DESC - новые
+$sql = "SELECT * FROM ads WHERE status = 'approved' ORDER BY id DESC LIMIT :limit"; // сортировка, ASC - сначала старые (ID 1,2,3..), DESC - новые
 try {
     $stmt = $pdo->prepare($sql);
     $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
@@ -59,6 +59,9 @@ try {
                 <!-- Кнопки авторизации справа -->
                 <div class="auth-buttons">
                     <?php if ($currentUser): ?>
+                        <?php if (($currentUser['role'] ?? 'user') === 'admin'): ?>
+                            <a href="admin.php" class="auth-btn">Панель модерации</a>
+                        <?php endif; ?>
                         <span class="user-welcome">Здравствуйте, <?= e($currentUser['name']) ?></span>
                         <a href="logout.php" class="auth-btn">Выход</a>
                     <?php else: ?>
@@ -95,23 +98,29 @@ try {
                 <?php if (!empty($ads)): ?>
                     <?php foreach ($ads as $row): 
                         $adId = (int)$row['id'];
-                        $photo = !empty($row['ads_photo']) ? e(basename($row['ads_photo'])) : '';
+                        // Формируем путь к изображению: если в БД просто имя файла, добавляем images/
+                        $photo = !empty($row['ads_photo']) ? trim($row['ads_photo']) : '';
+                        if ($photo) {
+                            // Если путь уже содержит /, используем как есть, иначе добавляем images/
+                            $photoPath = (strpos($photo, '/') !== false || strpos($photo, '\\') !== false) 
+                                ? e($photo) 
+                                : 'images/' . e(basename($photo));
+                        } else {
+                            $photoPath = '';
+                        }
                         $title = e($row['ads_title'] ?? '');
                         $price = isset($row['ads_price']) && is_numeric($row['ads_price']) ? number_format((int)$row['ads_price'], 0, '', ' ') : '0';
                     ?>
                         <div class="ad-card">
                             <div class="ad-img">
                                 <a href="detail.php?id=<?= $adId ?>">
-                                    <?php if ($photo): ?>
-                                        <img src="images/<?= $photo ?>"
-                                             alt="<?= $title ?>"
-                                             class="ad-image">
+                                    <?php if ($photoPath): ?>
+                                        <img src="<?= $photoPath ?>" alt="<?= $title ?>" class="ad-image">
                                     <?php else: ?>
                                         <div class="no-photo-placeholder">Нет изображения</div>
                                     <?php endif; ?>
                                 </a>
                             </div>
-
                             <div class="ad-price"><?= $price ?> ₽</div>
                             <div class="ad-title"><?= $title ?></div>
                         </div>
@@ -165,14 +174,24 @@ try {
                         <div class="form-row">
                             <input name="name" type="text" placeholder="Ваше имя" required class="form-input" id="regName">
                         </div>
+
+                        <div id="err-name" class="field-error" style="color:#e91e63;font-size:13px;margin-top:6px"></div>
+
                         <div class="form-row form-two-columns">
                             <input name="email" type="email" placeholder="Email" required class="form-input" id="regEmail">
                             <input name="phone" type="tel" placeholder="Мобильный телефон" required class="form-input" id="regPhone">
                         </div>
+
+                        <div id="err-email" class="field-error" style="color:#e91e63;font-size:13px;margin-top:6px"></div>
+                        <div id="err-phone" class="field-error" style="color:#e91e63;font-size:13px;margin-top:6px"></div>
+
                         <div class="form-row form-two-columns">
                             <input name="password" type="password" placeholder="Пароль" required class="form-input" id="regPassword">
                             <input name="confirm_password" type="password" placeholder="Повторите пароль" required class="form-input" id="regConfirmPassword">
                         </div>
+
+                        <div id="err-password" class="field-error" style="color:#e91e63;font-size:13px;margin-top:6px"></div>
+                        <div id="err-confirm_password" class="field-error" style="color:#e91e63;font-size:13px;margin-top:6px"></div>
 
                         <div class="checkbox-group">
                             <input type="checkbox" id="agree" name="agree" required class="checkbox-input">
@@ -185,6 +204,9 @@ try {
                     <div class="form-footer">
                         <p>Все поля обязательны для заполнения</p>
                     </div>
+
+                    <div id="err-server" class="field-error" style="color:#e91e63;font-size:13px;margin-top:10px"></div>
+
                 </div>
 
                 <!-- Форма авторизации -->
@@ -201,6 +223,10 @@ try {
                         <div class="form-row">
                             <input name="password" type="password" placeholder="Пароль" required class="form-input" id="loginPassword">
                         </div>
+
+                        <div id="err-login-email" class="field-error" style="color:#e91e63;font-size:13px;margin-top:6px"></div>
+                        <div id="err-login-password" class="field-error" style="color:#e91e63;font-size:13px;margin-top:6px"></div>
+                        <div id="err-server-login" class="field-error" style="color:#e91e63;font-size:13px;margin-top:10px"></div>
 
                         <button type="submit" class="submit-btn">Войти</button>
                     </form>
@@ -321,55 +347,102 @@ try {
             return !/^\d+$/.test(password);
         }
 
+        // helper: очистка ошибок формы регистрации
+        function clearRegisterErrors() {
+        ['name','email','phone','password','confirm_password','server'].forEach(f=>{
+            const el = document.getElementById('err-' + f);
+            if (el) el.textContent = '';
+        });
+        }
+
         async function handleRegister(event) {
             event.preventDefault();
+            clearRegisterErrors();
 
             const form = document.getElementById('registerFormElement');
+            if (!form) return;
             const formData = new FormData(form);
 
-            const resp = await fetch('register.php', {
-                method: 'POST',
-                body: formData
-            });
+            try {
+                const resp = await fetch('register.php', {
+                    method: 'POST',
+                    body: formData
+                });
 
-            const data = await resp.json();
+                // Защита: если сервер вернул не JSON — покажем в консоли
+                const contentType = resp.headers.get('content-type') || '';
+                if (!contentType.includes('application/json')) {
+                    const txt = await resp.text();
+                    console.error('register.php returned non-JSON response:', txt);
+                    const errServerEl = document.getElementById('err-server');
+                    if (errServerEl) errServerEl.textContent = 'Ошибка сервера (см. консоль)';
+                    return;
+                }
 
-            if (data.success) {
-                location.reload();
-                return;
-            }
+                const data = await resp.json();
 
-            // обработка ошибок
-            if (data.errors) {
-                const field = Object.keys(data.errors)[0];
-                alert(data.errors[field]);
+                if (data.success) {
+                    location.reload();
+                    return;
+                }
+
+                if (data.errors) {
+                    for (const [field, message] of Object.entries(data.errors)) {
+                        const errEl = document.getElementById('err-' + field);
+                        if (errEl) {
+                            errEl.textContent = message;
+                        } else {
+                            // общий серверный вывод
+                            const errServerEl = document.getElementById('err-server');
+                            if (errServerEl) errServerEl.textContent = message;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('Register fetch error', err);
+                const errServerEl = document.getElementById('err-server');
+                if (errServerEl) errServerEl.textContent = 'Ошибка сети';
             }
         }
+
 
         async function handleLogin(event) {
             event.preventDefault();
 
+            // очистим ошибки (логин)
+            const errLoginEmail = document.getElementById('err-login-email');
+            const errLoginPassword = document.getElementById('err-login-password');
+            const errLoginServer = document.getElementById('err-server-login');
+            if (errLoginEmail) errLoginEmail.textContent = '';
+            if (errLoginPassword) errLoginPassword.textContent = '';
+            if (errLoginServer) errLoginServer.textContent = '';
+
             const form = document.getElementById('loginFormElement');
+            if (!form) return;
             const formData = new FormData(form);
 
-            const resp = await fetch('login.php', {
-                method: 'POST',
-                body: formData
-            });
-
-            const data = await resp.json();
-
-            if (data.success) {
-                location.reload();
-                return;
-            }
-
-            if (data.errors) {
-                const field = Object.keys(data.errors)[0];
-                alert(data.errors[field]);
+            try {
+                const resp = await fetch('login.php', { method: 'POST', body: formData });
+                const contentType = resp.headers.get('content-type') || '';
+                if (!contentType.includes('application/json')) {
+                    const txt = await resp.text();
+                    console.error('login.php returned non-JSON:', txt);
+                    if (errLoginServer) errLoginServer.textContent = 'Ошибка сервера';
+                    return;
+                }
+                const data = await resp.json();
+                if (data.success) { location.reload(); return; }
+                if (data.errors) {
+                    // map server keys -> login error elements
+                    if (data.errors.email && errLoginEmail) errLoginEmail.textContent = data.errors.email;
+                    if (data.errors.password && errLoginPassword) errLoginPassword.textContent = data.errors.password;
+                    if (data.errors.server && errLoginServer) errLoginServer.textContent = data.errors.server;
+                }
+            } catch (err) {
+                console.error('Login fetch error', err);
+                if (errLoginServer) errLoginServer.textContent = 'Ошибка сети';
             }
         }
-
 
         // Постраничный вывод
         function loadMoreAds() {
@@ -396,21 +469,40 @@ try {
                         return;
                     }
 
-                    // Добавляем новые карточки
+                    // Добавляем новые карточки (безопасно)
                     data.ads.forEach(ad => {
                         const card = document.createElement('div');
                         card.className = 'ad-card';
+                        
+                        // Формируем путь к изображению: если просто имя файла, добавляем images/
+                        let photoPath = '';
+                        if (ad.ads_photo && ad.ads_photo.trim()) {
+                            const photo = ad.ads_photo.trim();
+                            if (photo.includes('/') || photo.includes('\\')) {
+                                photoPath = escapeHtml(photo);
+                            } else {
+                                photoPath = 'images/' + escapeHtml(photo);
+                            }
+                        }
+                        
+                        const imgHtml = photoPath
+                            ? `<img src="${photoPath}" class="ad-image" alt="${escapeHtml(ad.ads_title || '')}">`
+                            : `<div class="no-photo-placeholder">Нет изображения</div>`;
+
+                        const price = ad.ads_price ? parseInt(ad.ads_price).toLocaleString('ru-RU').replace(/,/g, ' ') : '0';
+
                         card.innerHTML = `
                             <div class="ad-img">
                                 <a href="detail.php?id=${ad.id}">
-                                    <img src="images/${ad.ads_photo}" class="ad-image">
+                                    ${imgHtml}
                                 </a>
                             </div>
-                            <div class="ad-price">${ad.ads_price} ₽</div>
-                            <div class="ad-title">${ad.ads_title}</div>
+                            <div class="ad-price">${price} ₽</div>
+                            <div class="ad-title">${escapeHtml(ad.ads_title || '')}</div>
                         `;
                         grid.appendChild(card);
                     });
+
 
                     // Обновляем last_id
                     if (data.last_id) {
@@ -428,6 +520,10 @@ try {
                     btn.disabled = false;
                     btn.textContent = 'Показать ещё';
                 });
+        }
+
+        function escapeHtml(s) {
+            return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         }
     </script>
 </body>
