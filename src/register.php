@@ -29,7 +29,7 @@ try {
     $required = ['name','email','phone','password','confirm_password'];
     $input = [];
     foreach ($required as $f) {
-        $input[$f] = trim((string)($_POST[$f] ?? ''));
+        $input[$f] = htmlspecialchars(trim((string)($_POST[$f] ?? '')));
         if ($input[$f] === '') {
             jsonError([$f => 'Поле обязательно']);
         }

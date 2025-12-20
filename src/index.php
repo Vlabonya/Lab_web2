@@ -20,11 +20,70 @@ if (!empty($_SESSION['user_id'])) {
     }
 }
 
+// Создаём таблицу categories, если её нет
+try {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS categories (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100) NOT NULL UNIQUE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    
+    // Заполняем таблицу начальными данными, если она пустая
+    $checkCategories = $pdo->query("SELECT COUNT(*) as cnt FROM categories");
+    $count = $checkCategories->fetch(PDO::FETCH_ASSOC)['cnt'];
+    if ($count == 0) {
+        $pdo->exec("INSERT INTO categories (name) VALUES 
+            ('Мебель'), 
+            ('Одежда'), 
+            ('Электроника'), 
+            ('Разное')");
+    }
+} catch (PDOException $e) {
+    error_log("Ошибка при создании/заполнении таблицы categories: " . $e->getMessage());
+}
+
+// Загружаем категории из базы данных
+$categories = [];
+try {
+    $categoriesStmt = $pdo->query("SELECT id, name FROM categories ORDER BY id");
+    $categories = $categoriesStmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log("Ошибка при загрузке категорий: " . $e->getMessage());
+    $categories = [];
+}
+
+try {
+    $checkColumn = $pdo->query("SHOW COLUMNS FROM ads LIKE 'category'");
+    if ($checkColumn->rowCount() == 0) {
+        $pdo->exec("ALTER TABLE ads ADD COLUMN category INT DEFAULT NULL");
+    } else {
+        $columnInfo = $pdo->query("SHOW COLUMNS FROM ads WHERE Field = 'category'")->fetch(PDO::FETCH_ASSOC);
+        if ($columnInfo && strpos(strtolower($columnInfo['Type']), 'varchar') !== false) {
+            $otherCategory = $pdo->query("SELECT id FROM categories WHERE name = 'Разное' LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+            $defaultCategoryId = $otherCategory ? (int)$otherCategory['id'] : null;
+            
+            if ($defaultCategoryId) {
+                $pdo->exec("UPDATE ads SET category = " . $defaultCategoryId . " WHERE category IS NULL OR category = '' OR category NOT REGEXP '^[0-9]+$'");
+            }
+            $pdo->exec("ALTER TABLE ads MODIFY COLUMN category INT DEFAULT NULL");
+        }
+    }
+} catch (PDOException $e) {
+    error_log("Ошибка при проверке/изменении поля category: " . $e->getMessage());
+}
+
+$selectedCategory = isset($_GET['category']) ? (int)$_GET['category'] : 0; 
+
 // Постраничный вывод - получаем первые 10 записей (только одобренные)
 $limit = 10;
-$sql = "SELECT * FROM ads WHERE status = 'approved' ORDER BY id DESC LIMIT :limit"; // сортировка, ASC - сначала старые (ID 1,2,3..), DESC - новые
-try {
+if ($selectedCategory === 0) {
+    $sql = "SELECT * FROM ads WHERE status = 'approved' ORDER BY id DESC LIMIT :limit";
     $stmt = $pdo->prepare($sql);
+} else {
+    $sql = "SELECT * FROM ads WHERE status = 'approved' AND category = :category ORDER BY id DESC LIMIT :limit";
+    $stmt = $pdo->prepare($sql);
+    $stmt->bindValue(':category', $selectedCategory, PDO::PARAM_INT);
+}
+try {
     $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
     $stmt->execute();
     $ads = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -46,6 +105,47 @@ try {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        .category-filter {
+            margin-bottom: 32px;
+        }
+        .category-select {
+            width: 100%;
+            max-width: 300px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 2px solid #e0e0e0;
+            background: #fff;
+            color: #333;
+            font-size: 14px;
+            font-weight: 500;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 16px center;
+            padding-right: 40px;
+        }
+        .category-select:hover {
+            border-color: #ff006b;
+            color: #ff006b;
+        }
+        .category-select:focus {
+            outline: none;
+            border-color: #ff006b;
+            box-shadow: 0 0 0 3px rgba(255, 0, 107, 0.1);
+        }
+        @media (max-width: 768px) {
+            .category-filter {
+                margin-bottom: 24px;
+            }
+            .category-select {
+                max-width: 100%;
+            }
+        }
+    </style>
 </head>
 
 <body>
@@ -94,6 +194,18 @@ try {
                 <?php endif; ?>
             </div>
 
+            <!-- Фильтр по категориям -->
+            <div class="category-filter">
+                <select class="category-select" id="categorySelect" onchange="window.location.href = this.value ? 'index.php?category=' + this.value : 'index.php'">
+                    <option value="0" <?= $selectedCategory === 0 ? 'selected' : '' ?>>Все категории</option>
+                    <?php foreach ($categories as $cat): ?>
+                        <option value="<?= (int)$cat['id'] ?>" <?= $selectedCategory === (int)$cat['id'] ? 'selected' : '' ?>>
+                            <?= e($cat['name']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
             <div class="ads-grid" id="adsGrid">
                 <?php if (!empty($ads)): ?>
                     <?php foreach ($ads as $row): 
@@ -133,7 +245,7 @@ try {
             </div>
 
             <?php if (!empty($ads) && count($ads) >= $limit): ?>
-                <button class="show-more-btn" id="showMoreBtn" data-last-id="<?= $lastId ?>">
+                <button class="show-more-btn" id="showMoreBtn" data-last-id="<?= $lastId ?>" data-category="<?= $selectedCategory ?>">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e91e63" stroke-width="2">
                         <path d="M6 9l6 6 6-6" />
                     </svg>
@@ -451,10 +563,13 @@ try {
             if (!btn || !grid) return;
 
             const lastId = btn.getAttribute('data-last-id');
+            const category = btn.getAttribute('data-category') || '0';
 
-            const url = lastId
-                ? `load_more.php?last_id=${encodeURIComponent(lastId)}`
-                : `load_more.php`;
+            const urlParams = new URLSearchParams();
+            if (lastId) urlParams.append('last_id', lastId);
+            if (category && category !== '0') urlParams.append('category', category);
+            
+            const url = `load_more.php?${urlParams.toString()}`;
 
             btn.disabled = true;
             btn.textContent = 'Загрузка...';

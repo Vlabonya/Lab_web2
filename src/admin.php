@@ -158,6 +158,22 @@ try {
             display: flex;
             gap: 8px;
         }
+        .btn-edit {
+            background: #ff9800;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 14px;
+            text-decoration: none;
+            display: inline-block;
+            transition: background 0.2s;
+        }
+        .btn-edit:hover {
+            background: #fb8c00;
+        }
         .btn-approve {
             background: #4CAF50;
             color: white;
@@ -214,6 +230,58 @@ try {
             padding: 12px 16px;
             border-radius: 8px;
             margin-bottom: 20px;
+        }
+
+        /* Адаптивность панели модерации */
+        @media (max-width: 1024px) {
+            .admin-container {
+                margin: 24px auto;
+                padding: 0 16px;
+            }
+
+            .admin-header h1 {
+                font-size: 30px;
+            }
+
+            .moderation-table th,
+            .moderation-table td {
+                padding: 12px;
+            }
+
+            .ad-preview-img {
+                width: 70px;
+                height: 70px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .admin-container {
+                margin: 20px auto;
+                padding: 0 12px;
+            }
+
+            .admin-header h1 {
+                font-size: 26px;
+            }
+
+            .moderation-table {
+                display: block;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+
+            .moderation-actions {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .btn-view,
+            .btn-edit,
+            .btn-approve,
+            .btn-reject {
+                width: 100%;
+                text-align: center;
+            }
         }
     </style>
 </head>
@@ -295,7 +363,8 @@ try {
                                 </td>
                                 <td>
                                     <div class="moderation-actions">
-                                        <a href="detail.php?id=<?= (int)$ad['id'] ?>" class="btn-view">Просмотр</a>
+                                        <a href="detail.php?id=<?= (int)$ad['id'] ?>&moderation=1" class="btn-view">Просмотр</a>
+                                        <a href="edit_ad.php?id=<?= (int)$ad['id'] ?>" class="btn-edit">Редактировать</a>
                                         <form method="post" style="display: inline;" onsubmit="return confirm('Одобрить это объявление?');">
                                             <input type="hidden" name="ad_id" value="<?= (int)$ad['id'] ?>">
                                             <input type="hidden" name="action" value="approve">

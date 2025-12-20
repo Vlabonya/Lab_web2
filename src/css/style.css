@@ -328,61 +328,20 @@ label {
 
 /* === СЕТКА ОБЪЯВЛЕНИЙ НА ГЛАВНОЙ === */
 .ads-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  /* 5 колонок на десктопе */
+  display: flex;
+  flex-wrap: wrap;
   gap: 24px;
   margin-bottom: 48px;
 }
 
-/* 4 колонки на экранах 1200px */
-@media (max-width: 1200px) {
-  .ads-grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
-
-/* 3 колонки на экранах 992px */
-@media (max-width: 992px) {
-  .ads-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-/* 2 колонки на мобильных (768px и меньше) */
-@media (max-width: 768px) {
-  .ads-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
-  }
-
-  .ad-card {
-    width: 100%;
-    height: auto;
-  }
-
-  .ad-img {
-    height: 180px;
-  }
-}
-
-/* 1 колонка на очень маленьких экранах */
-@media (max-width: 480px) {
-  .ads-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Карточка объявления */
+/* Карточка объявления (фиксированная ширина до брейкпоинтов) */
 .ad-card {
   background: #fff;
   display: flex;
   flex-direction: column;
   cursor: pointer;
-  width: calc(25% - 30px);
-  min-width: 220px;
-  flex-grow: 1;
-  
+  flex: 0 0 220px;
+  max-width: 220px;
 }
 
 
@@ -504,18 +463,29 @@ label {
 /* Адаптивность сетки для главной */
 @media (max-width: 1200px) {
   .ads-grid {
-    justify-content: center;
+    justify-content: flex-start;
+    gap: 20px;
+  }
+
+  .ad-card {
+    flex: 0 0 210px;
+    max-width: 210px;
   }
 }
 
 @media (max-width: 768px) {
+  .ads-grid {
+    gap: 16px;
+    justify-content: space-between;
+  }
+
   .ad-card {
-    width: 216px;
-    height: 304px;
+    flex: 0 0 calc(50% - 8px);
+    max-width: none;
   }
 
   .ad-img {
-    height: 200px;
+    height: 180px;
   }
 
   .section-title {
@@ -554,14 +524,17 @@ label {
     font-size: 14px;
   }
 
+  .ads-grid {
+    justify-content: center;
+  }
+
   .ad-card {
-    width: 47%;
-    height: auto;
-    min-height: 250px;
+    flex: 0 0 100%;
+    max-width: 340px;
   }
 
   .ad-img {
-    height: 150px;
+    height: 200px;
   }
 
   .ad-price {
@@ -595,8 +568,8 @@ label {
 /* Для экранов шириной 320px и меньше */
 @media (max-width: 320px) {
   .ad-card {
-    width: 100%;
-    height: 280px;
+    flex: 0 0 100%;
+    max-width: 100%;
   }
 
   .ad-img {
@@ -616,3 +589,95 @@ label {
   display: inline-block;
 }
 
+/* ===== АДАПТИВНОСТЬ (общая) ===== */
+
+/* Планшеты и узкие ноутбуки */
+@media (max-width: 1280px) {
+  .container {
+    max-width: 960px;
+    padding: 0 20px;
+  }
+
+  .header-top {
+    gap: 16px;
+  }
+
+  .section-header {
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .section-title {
+    font-size: 40px;
+    line-height: 50px;
+  }
+
+  .ads-grid {
+    gap: 20px;
+  }
+}
+
+/* Телефоны */
+@media (max-width: 768px) {
+  .container {
+    max-width: 100%;
+    padding: 0 12px;
+  }
+
+  .header .container {
+    padding-top: 12px;
+    padding-bottom: 16px;
+  }
+
+  .header-top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .logo-image {
+    width: 150px;
+    height: auto;
+  }
+
+  .auth-buttons {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .auth-btn {
+    padding: 8px 12px;
+    font-size: 14px;
+  }
+
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .section-title {
+    font-size: 32px;
+    line-height: 40px;
+  }
+
+  .add-btn {
+    width: 100%;
+    max-width: 100%;
+    height: 52px;
+  }
+
+  .footer-inner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .footer-email,
+  .footer-links a {
+    font-size: 13px;
+  }
+}

@@ -85,6 +85,9 @@ if (!empty($_SESSION['user_id'])) {
 // Проверяем, является ли пользователь администратором
 $isAdmin = $currentUser && ($currentUser['role'] ?? 'user') === 'admin';
 
+// Проверяем, просматривается ли объявление через панель модерации
+$isModerationView = isset($_GET['moderation']) && $_GET['moderation'] == '1';
+
 // Обработка действий модерации (только для администраторов)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAdmin && isset($_POST['action']) && isset($_POST['ad_id'])) {
     $adId = (int)$_POST['ad_id'];
@@ -186,7 +189,7 @@ try {
                 <div class="detail-left-column">
                     <div class="ad-photo-container">
                         <?php 
-                        $photo = !empty($ad['ads_photo']) ? trim($ad['ads_photo']) : '';
+                        $photo = !empty($ad['ads_photo']) ? htmlspecialchars(trim($ad['ads_photo'])) : '';
                         if ($photo) {
                             // Если путь уже содержит /, используем как есть, иначе добавляем images/
                             $photoPath = (strpos($photo, '/') !== false || strpos($photo, '\\') !== false) 
@@ -206,7 +209,7 @@ try {
                     </div>
 
                     <!-- Откликнувшиеся (под фото) -->
-                    <?php if (!$isAdmin): ?>
+                    <?php if (!$isModerationView): ?>
                         <div class="responses-left-block">
                             <div class="responses-header">
                                 <h2 class="block-title">Откликнулись</h2>
@@ -219,7 +222,7 @@ try {
                                 <div class="responses-list">
                                     <?php foreach ($responses as $response): ?>
                                         <div class="response-person">
-                                            <div class="response-person-name"><?= e($response['user_name'] ?? $response['name'] ?? '—') ?></div>
+                                            <div class="response-person-name"><?= e($response['user_name'] ?: ($response['name'] ?: '—')) ?></div>
                                             <div class="response-person-phone"><?= e($response['user_phone'] ?? $response['phone'] ?? '—') ?></div>
                                         </div>
                                     <?php endforeach; ?>
@@ -237,7 +240,7 @@ try {
                 <div class="detail-info-column">
                     <?php if (isset($_GET['error'])): ?>
                         <div style="color: red; margin-bottom: 20px; padding: 12px; background: #ffe6e6; border-radius: 8px;">
-                            <?= e($_GET['error']) ?>
+                            <?= e(mb_strimwidth((string)$_GET['error'], 0, 300, '…')) ?>
                         </div>
                     <?php endif; ?>
                     <!-- Верхний блок: цена + кнопка назад -->
@@ -286,6 +289,13 @@ try {
                             <?php endif; ?>
                         </div>
                     </div>
+
+                    <!-- Блок ссылок для администратора (редактирование + модерация) -->
+                    <?php if ($isAdmin): ?>
+                        <div style="margin-bottom: 16px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+                            <a href="edit_ad.php?id=<?= $id ?>" style="background:#ff9800;color:#fff;border-radius:8px;padding:8px 16px;text-decoration:none;font-size:14px;font-weight:500;">Редактировать объявление</a>
+                        </div>
+                    <?php endif; ?>
 
                     <!-- Блок модерации для администраторов (только если админ не является автором объявления) -->
                     <?php if ($isAdmin && !$isAuthor): 
