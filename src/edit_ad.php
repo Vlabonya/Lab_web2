@@ -120,9 +120,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     
-    if (empty($error)) {
-    } elseif (!in_array($status, ['pending', 'approved', 'rejected'], true)) {
+    // Проверка статуса
+    if (empty($error) && !in_array($status, ['pending', 'approved', 'rejected'], true)) {
         $error = 'Некорректный статус объявления';
+    }
+    
+    // Если нет ошибок валидации, обрабатываем фото и сохраняем
+    if (empty($error)) {
         $photoPath = $ad['ads_photo'] ?? '';
 
         // Если загружено новое фото — обрабатываем как в add.php
